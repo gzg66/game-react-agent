@@ -1,0 +1,40 @@
+# 标准日志配置。
+# 控制台和文件日志都会沿用这里的格式与级别。
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    # 控制台简要格式
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+  detailed:
+    # 文件详细格式，包含函数名和行号
+    format: "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+
+handlers:
+  console:
+    # 输出到终端
+    class: logging.StreamHandler
+    formatter: standard
+    stream: ext://sys.stdout
+  file:
+    # 输出到本地日志文件
+    class: logging.FileHandler
+    formatter: detailed
+    filename: data/agent.log
+    mode: a
+    encoding: utf-8
+
+loggers:
+  game_agent:
+    # 项目主日志器
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+root:
+  # 兜底根日志器
+  level: INFO
+  handlers: [console]

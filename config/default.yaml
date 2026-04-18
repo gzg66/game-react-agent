@@ -1,0 +1,100 @@
+# 默认配置。
+# 适合本地开发、模拟设备验证和作为其它游戏配置的基础模板。
+
+# 设备连接配置
+device:
+  # 设备平台：android / ios
+  platform: android
+  # 真机或模拟器串号；为空时由外部逻辑决定
+  serial: null
+  # 是否启用模拟设备
+  use_mock: true
+
+# 游戏连接配置
+game:
+  # 项目名称，仅用于展示
+  project_name: ""
+  # 引擎类型：unity3d / cocos_creator / cocos2dx_js / cocos2dx_lua / android_uiautomation
+  engine_type: cocos2dx_js
+  # Android 包名
+  package_name: ""
+  # 启动 Activity
+  activity_name: ""
+  # Airtest 连接 URI
+  device_uri: ""
+  # 设备串号，通常与 device.serial 一致
+  device_serial: ""
+  # Poco 主机地址
+  poco_host: "127.0.0.1"
+  # Poco 端口
+  poco_port: 5003
+
+# 冷启动探索参数
+exploration:
+  # 最大探索步数
+  max_steps: 200
+  # 最多发现页面数
+  max_pages: 30
+  # 每个页面最多尝试多少个可交互节点
+  max_actions_per_page: 20
+  # 启动后等待游戏加载完成的秒数
+  boot_wait_s: 10.0
+  # 每次动作后的等待秒数
+  action_wait_s: 2.0
+  # 连续多少次没有发现新页面后可视为接近停滞
+  no_new_page_limit: 10
+  # 导出目录
+  output_dir: outputs/cold_start
+
+# 探索安全词配置
+safety:
+  # 高风险关键词：命中后默认跳过
+  dangerous_keywords: []
+  # 安全优先关键词：可用于优先选择安全按钮
+  safe_priority_keywords: []
+
+# 视觉模型配置
+vision:
+  # 是否启用视觉模型
+  enabled: false
+  # 视觉模型名称
+  model_name: gemini-3-flash-preview
+  # 视觉策略模式
+  mode: vision_first
+
+# 文本模型配置
+gemini:
+  # 文本模型名称
+  model_name: gemini-3-flash-preview
+  # 采样温度
+  temperature: 0.2
+  # 最大输出 Token 数
+  max_output_tokens: 4096
+  # 结构化响应类型
+  response_mime_type: application/json
+
+# 感知层配置
+perception:
+  # UI 差异判定阈值
+  diff_threshold: 0.05
+  # Poco 树最大提取深度
+  poco_tree_max_depth: 8
+  # 截图缩放尺寸 [宽, 高]
+  screenshot_resize: [720, 1280]
+
+# 图数据库配置
+graph:
+  # 状态图数据库路径
+  db_path: data/graph.db
+  # 图探索最大深度
+  exploration_max_depth: 20
+  # 页面哈希算法
+  hash_algorithm: sha256
+
+# 上下文窗口配置
+context:
+  # 保留最近多少步上下文给模型
+  window_size: 10
+
+# 日志级别：DEBUG / INFO / WARNING / ERROR
+log_level: INFO

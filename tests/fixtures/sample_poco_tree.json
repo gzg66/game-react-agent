@@ -1,0 +1,112 @@
+[
+  {
+    "name": "btn_hero",
+    "type": "Button",
+    "text": "Heroes",
+    "visible": true,
+    "pos": [0.1, 0.9],
+    "size": [0.15, 0.08],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > MainPanel > btn_hero"
+  },
+  {
+    "name": "btn_shop",
+    "type": "Button",
+    "text": "Shop",
+    "visible": true,
+    "pos": [0.3, 0.9],
+    "size": [0.15, 0.08],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > MainPanel > btn_shop"
+  },
+  {
+    "name": "btn_battle",
+    "type": "Button",
+    "text": "Battle",
+    "visible": true,
+    "pos": [0.5, 0.9],
+    "size": [0.15, 0.08],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > MainPanel > btn_battle"
+  },
+  {
+    "name": "btn_backpack",
+    "type": "Button",
+    "text": "Backpack",
+    "visible": true,
+    "pos": [0.7, 0.9],
+    "size": [0.15, 0.08],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > MainPanel > btn_backpack"
+  },
+  {
+    "name": "txt_gold",
+    "type": "Text",
+    "text": "1000",
+    "visible": true,
+    "pos": [0.9, 0.05],
+    "size": [0.1, 0.04],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > TopBar > txt_gold"
+  },
+  {
+    "name": "txt_player_name",
+    "type": "Text",
+    "text": "Player1",
+    "visible": true,
+    "pos": [0.15, 0.05],
+    "size": [0.2, 0.04],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > TopBar > txt_player_name"
+  },
+  {
+    "name": "btn_settings",
+    "type": "Button",
+    "text": null,
+    "visible": true,
+    "pos": [0.95, 0.05],
+    "size": [0.04, 0.04],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > TopBar > btn_settings"
+  },
+  {
+    "name": "panel_main",
+    "type": "Panel",
+    "text": null,
+    "visible": true,
+    "pos": [0.5, 0.5],
+    "size": [1.0, 0.85],
+    "children_count": 4,
+    "payload": {},
+    "poco_path": "Root > MainPanel"
+  },
+  {
+    "name": "bg_image",
+    "type": "Image",
+    "text": null,
+    "visible": true,
+    "pos": [0.5, 0.5],
+    "size": [1.0, 1.0],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > bg_image"
+  },
+  {
+    "name": "hidden_btn",
+    "type": "Button",
+    "text": "Hidden",
+    "visible": false,
+    "pos": [0.0, 0.0],
+    "size": [0.01, 0.01],
+    "children_count": 0,
+    "payload": {},
+    "poco_path": "Root > hidden_btn"
+  }
+]

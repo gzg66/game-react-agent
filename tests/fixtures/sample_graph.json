@@ -1,0 +1,99 @@
+{
+  "nodes": [
+    {
+      "node_id": "aabb1122ccdd3344",
+      "page_name": "main_city",
+      "page_description": "Main city hub with navigation buttons",
+      "page_category": "navigation",
+      "key_buttons": ["btn_hero", "btn_shop", "btn_battle"],
+      "discovered_at": 1700000000.0,
+      "visit_count": 5
+    },
+    {
+      "node_id": "eeff5566aabb7788",
+      "page_name": "hero_list",
+      "page_description": "Hero roster and upgrade interface",
+      "page_category": "inventory",
+      "key_buttons": ["btn_back", "btn_upgrade", "btn_equip"],
+      "discovered_at": 1700000001.0,
+      "visit_count": 3
+    },
+    {
+      "node_id": "1122334455667788",
+      "page_name": "shop",
+      "page_description": "In-game shop for purchasing items",
+      "page_category": "shop",
+      "key_buttons": ["btn_back", "btn_buy_gems", "btn_buy_gold"],
+      "discovered_at": 1700000002.0,
+      "visit_count": 2
+    },
+    {
+      "node_id": "99aabbccddeeff00",
+      "page_name": "battle_select",
+      "page_description": "Battle mode selection screen",
+      "page_category": "combat",
+      "key_buttons": ["btn_back", "btn_campaign", "btn_arena"],
+      "discovered_at": 1700000003.0,
+      "visit_count": 1
+    },
+    {
+      "node_id": "ffeeddccbbaa9988",
+      "page_name": "hero_upgrade",
+      "page_description": "Hero level up and skill upgrade",
+      "page_category": "inventory",
+      "key_buttons": ["btn_back", "btn_level_up", "btn_skill"],
+      "discovered_at": 1700000004.0,
+      "visit_count": 1
+    }
+  ],
+  "edges": [
+    {
+      "source_id": "aabb1122ccdd3344",
+      "target_id": "eeff5566aabb7788",
+      "actions": [{"action_type": "poco_click", "target": "Root > MainPanel > btn_hero", "params": {}}],
+      "discovered_at": 1700000001.0
+    },
+    {
+      "source_id": "aabb1122ccdd3344",
+      "target_id": "1122334455667788",
+      "actions": [{"action_type": "poco_click", "target": "Root > MainPanel > btn_shop", "params": {}}],
+      "discovered_at": 1700000002.0
+    },
+    {
+      "source_id": "aabb1122ccdd3344",
+      "target_id": "99aabbccddeeff00",
+      "actions": [{"action_type": "poco_click", "target": "Root > MainPanel > btn_battle", "params": {}}],
+      "discovered_at": 1700000003.0
+    },
+    {
+      "source_id": "eeff5566aabb7788",
+      "target_id": "aabb1122ccdd3344",
+      "actions": [{"action_type": "poco_click", "target": "Root > HeroPanel > btn_back", "params": {}}],
+      "discovered_at": 1700000001.5
+    },
+    {
+      "source_id": "eeff5566aabb7788",
+      "target_id": "ffeeddccbbaa9988",
+      "actions": [{"action_type": "poco_click", "target": "Root > HeroPanel > btn_upgrade", "params": {}}],
+      "discovered_at": 1700000004.0
+    },
+    {
+      "source_id": "1122334455667788",
+      "target_id": "aabb1122ccdd3344",
+      "actions": [{"action_type": "poco_click", "target": "Root > ShopPanel > btn_back", "params": {}}],
+      "discovered_at": 1700000002.5
+    },
+    {
+      "source_id": "99aabbccddeeff00",
+      "target_id": "aabb1122ccdd3344",
+      "actions": [{"action_type": "poco_click", "target": "Root > BattlePanel > btn_back", "params": {}}],
+      "discovered_at": 1700000003.5
+    },
+    {
+      "source_id": "ffeeddccbbaa9988",
+      "target_id": "eeff5566aabb7788",
+      "actions": [{"action_type": "poco_click", "target": "Root > UpgradePanel > btn_back", "params": {}}],
+      "discovered_at": 1700000004.5
+    }
+  ]
+}
