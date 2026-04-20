@@ -8,7 +8,6 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 from game_agent.cognition import prompts
 from game_agent.cognition.context import ContextManager, ReActStep
@@ -16,9 +15,10 @@ from game_agent.cognition.gemini_client import GeminiClient
 from game_agent.cognition.navigation_memory import NavigationMemory
 from game_agent.cognition.page_cache import PageKnowledge, PageKnowledgeCache
 from game_agent.config import AppConfig
+from game_agent.exceptions import PerceptionError
 from game_agent.graph.annotator import PageAnnotator
 from game_agent.perception.base import PerceptionProvider
-from game_agent.perception.state import PerceptionState
+from game_agent.perception.state import L1Perception, L2Perception
 from game_agent.perception.ui_diff import UIDiffCalculator
 from game_agent.tools.registry import ToolRegistry
 
@@ -108,12 +108,21 @@ class ReActLoop:
             return f"touch({x:.2f},{y:.2f})"
         return None
 
-    def _get_page_context(self, page_hash: str, perception_data: Any) -> str:
+    def _get_page_context(
+        self,
+        page_hash: str,
+        perception_data: L1Perception | L2Perception,
+        *,
+        refresh: bool = False,
+    ) -> str:
         """Get cached page annotation or create one via LLM."""
-        if self._page_cache.has(page_hash):
+        if self._page_cache.has(page_hash) and not refresh:
             return self._page_cache.to_prompt_text(page_hash)
         try:
-            annotation = self._annotator.annotate(perception_data)
+            if isinstance(perception_data, L2Perception):
+                annotation = self._annotator.annotate_with_screenshot(perception_data)
+            else:
+                annotation = self._annotator.annotate(perception_data)
             knowledge = PageKnowledge(
                 page_name=annotation.page_name,
                 page_description=annotation.page_description,
@@ -202,18 +211,18 @@ class ReActLoop:
             task, initial_perception.poco_tree_markdown
         )
 
-        prev_page_hash: str = ""
         action_count = 0
+        force_l2_reason: str | None = None
 
         while action_count < max_steps:
-            perception_data = self._perception.capture_l1()
-            curr_state = self._perception.to_state(perception_data)
+            l1_perception = self._perception.capture_l1()
+            curr_state = self._perception.to_state(l1_perception)
             curr_page_hash = curr_state.page_hash[:16]
             logger.info(
                 "步骤 %d：页面=%s，可交互节点=%d",
                 action_count,
                 curr_page_hash[:8],
-                len(perception_data.interactive_nodes),
+                len(l1_perception.interactive_nodes),
             )
 
             stale_count = self._context.page_stale_count()
@@ -224,7 +233,20 @@ class ReActLoop:
                 self._context.consecutive_failures() >= L2_ESCALATION_FAILURE_THRESHOLD
                 or stale_count >= self._staleness_threshold
                 or is_cycling
+                or force_l2_reason is not None
             )
+
+            if use_l2:
+                try:
+                    perception_data = self._perception.capture_l2()
+                    curr_state = self._perception.to_state(perception_data)
+                    curr_page_hash = curr_state.page_hash[:16]
+                except PerceptionError as exc:
+                    logger.warning("步骤 %d：L2 感知失败，回退到 L1：%s", action_count, exc)
+                    perception_data = l1_perception
+                    use_l2 = False
+            else:
+                perception_data = l1_perception
 
             if is_cycling:
                 logger.warning(
@@ -245,7 +267,11 @@ class ReActLoop:
                 hide=hide_ineffective,
             )
             nav_knowledge = self._nav_memory.to_prompt_text(curr_page_hash)
-            page_context = self._get_page_context(curr_page_hash, perception_data)
+            page_context = self._get_page_context(
+                curr_page_hash,
+                perception_data,
+                refresh=use_l2 and force_l2_reason is not None,
+            )
 
             prompt_text = prompts.SYSTEM_PROMPT.format(
                 perception_text=annotated_markdown,
@@ -266,12 +292,21 @@ class ReActLoop:
                     "必须立即尝试完全不同的操作策略：滑动、使用返回键、或点击从未尝试过的按钮。"
                 )
 
+            if force_l2_reason:
+                logger.info("步骤 %d：强制使用 L2 感知，原因=%s", action_count, force_l2_reason)
+                prompt_text += (
+                    "\n\n## 视觉优先指令\n"
+                    f"{force_l2_reason}\n"
+                    "本轮必须优先根据截图判断是否存在新手引导手指、箭头、聚光高亮或被遮罩强调的目标区域；"
+                    "若存在，应优先使用对应的点击操作跟随引导，而不是继续探索普通按钮。"
+                )
+                force_l2_reason = None
+
             if use_l2:
                 if self._context.consecutive_failures() >= L2_ESCALATION_FAILURE_THRESHOLD:
                     logger.info("连续失败次数过多，升级到 L2 感知")
-                l2_data = self._perception.capture_l2()
                 response = self._gemini.send_multimodal(
-                    prompt_text, l2_data.screenshot_b64
+                    prompt_text, perception_data.screenshot_b64
                 )
             else:
                 response = self._gemini.send_message(prompt_text)
@@ -311,7 +346,8 @@ class ReActLoop:
 
             # Post-action loading wait: for click actions, if page hash unchanged,
             # give the game a moment to finish animating/loading.
-            post_state = self._perception.to_state(self._perception.capture_l1())
+            post_perception = self._perception.capture_l1()
+            post_state = self._perception.to_state(post_perception)
             if (
                 fc.name in ("poco_click", "airtest_touch_pos")
                 and post_state.page_hash[:16] == curr_page_hash
@@ -323,7 +359,8 @@ class ReActLoop:
                         _retry + 1,
                     )
                     await asyncio.sleep(POST_ACTION_LOADING_WAIT_S)
-                    post_state = self._perception.to_state(self._perception.capture_l1())
+                    post_perception = self._perception.capture_l1()
+                    post_state = self._perception.to_state(post_perception)
                     if post_state.page_hash[:16] != curr_page_hash:
                         logger.info("UI 已完成变化，继续规划")
                         break
@@ -351,8 +388,16 @@ class ReActLoop:
                         button_name,
                         curr_page_hash[:8],
                     )
+                    force_l2_reason = (
+                        "上一步点击后页面结构未发生变化，但游戏内可能出现了纯视觉引导。"
+                        "请结合截图重点检查是否有手指动画、箭头、高亮描边、聚光遮罩或被教程强调的点击目标。"
+                    )
+                elif fc.name in ("poco_click", "airtest_touch_pos"):
+                    force_l2_reason = (
+                        "上一步点击后页面结构已变化。请结合截图确认新页面是否处于新手教程或强引导状态，"
+                        "若有手指、箭头或高亮提示，优先跟随其指向的区域。"
+                    )
 
-            prev_page_hash = curr_page_hash
             action_count += 1
 
             await asyncio.sleep(0.3)

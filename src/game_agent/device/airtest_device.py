@@ -17,7 +17,7 @@ from game_agent.config import (
     GameConnectionConfig,
 )
 from game_agent.device.base import DeviceController, PocoNode, TouchResult
-from game_agent.exceptions import DeviceNotConnectedError, PocoNodeNotFoundError
+from game_agent.exceptions import DeviceNotConnectedError, PerceptionError, PocoNodeNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -196,12 +196,60 @@ class AirtestDevice(DeviceController):
         from PIL import Image
 
         screen = snapshot(filename=None)
+        if screen is None:
+            logger.warning("Airtest snapshot 返回空数据，尝试使用 ADB screencap 兜底")
+            fallback = self._adb_screenshot()
+            if fallback:
+                return fallback
+            raise PerceptionError("设备截图失败：Airtest snapshot 返回空数据")
         buf = io.BytesIO()
         if isinstance(screen, Image.Image):
             screen.save(buf, format="PNG")
-        else:
+        elif isinstance(screen, (bytes, bytearray)):
             buf.write(screen)
+        else:
+            logger.warning("Airtest snapshot 返回了未知类型 %s，尝试使用 ADB screencap 兜底", type(screen).__name__)
+            fallback = self._adb_screenshot()
+            if fallback:
+                return fallback
+            raise PerceptionError(f"设备截图失败：snapshot 返回未知类型 {type(screen).__name__}")
         return buf.getvalue()
+
+    def _adb_screenshot(self) -> bytes | None:
+        result = subprocess.run(
+            [self._get_adb(), "-s", self._config.device_serial, "exec-out", "screencap", "-p"],
+            check=False,
+            capture_output=True,
+        )
+        data = bytes(result.stdout or b"")
+        if result.returncode == 0 and data.startswith(b"\x89PNG"):
+            return data
+
+        temp_path = "/sdcard/temp_screen_agent.png"
+        self._adb_cmd("shell", "rm", "-f", temp_path)
+        capture = self._adb_cmd("shell", "screencap", "-p", temp_path)
+        if capture.returncode != 0:
+            return None
+
+        local_path = Path("data") / "temp_screen_agent.png"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        pull = subprocess.run(
+            [self._get_adb(), "-s", self._config.device_serial, "pull", temp_path, str(local_path)],
+            check=False,
+            capture_output=True,
+        )
+        if pull.returncode != 0 or not local_path.exists():
+            return None
+
+        try:
+            data = local_path.read_bytes()
+            return data if data.startswith(b"\x89PNG") else None
+        finally:
+            try:
+                local_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            self._adb_cmd("shell", "rm", "-f", temp_path)
 
     def get_screen_size(self) -> tuple[int, int]:
         result = self._adb_cmd("shell", "wm", "size")

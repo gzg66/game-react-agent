@@ -42,5 +42,5 @@ class DefaultPerceptionProvider(PerceptionProvider):
         return PerceptionState(
             page_hash=perception.page_hash,
             poco_node_names=frozenset(n.name for n in perception.interactive_nodes),
-            screenshot_bytes=None,
+            screenshot_bytes=getattr(perception, "screenshot_raw", None),
         )

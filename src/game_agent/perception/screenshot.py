@@ -7,6 +7,7 @@ import time
 
 from game_agent.config import PerceptionConfig
 from game_agent.device.base import DeviceController
+from game_agent.exceptions import PerceptionError
 from game_agent.perception.poco_tree import PocoTreeExtractor
 from game_agent.perception.state import L2Perception
 
@@ -27,7 +28,11 @@ class ScreenshotCapture:
     def capture(self) -> L2Perception:
         l1 = self._tree_extractor.extract()
         raw_screenshot = self._device.screenshot()
+        if not raw_screenshot:
+            raise PerceptionError("截图为空，无法执行 L2 感知")
         resized = self._resize_screenshot(raw_screenshot)
+        if not resized:
+            raise PerceptionError("截图缩放后为空，无法执行 L2 感知")
         b64 = base64.b64encode(resized).decode("ascii")
 
         return L2Perception(
