@@ -98,6 +98,32 @@ class ReActLoop:
         compact = re.sub(r"\s+", " ", text)
         return compact[:400] + ("..." if len(compact) > 400 else "")
 
+    @staticmethod
+    def _format_action_for_log(response) -> str:
+        if not response.function_calls:
+            return "finish"
+        action_lines = []
+        for call in response.function_calls:
+            action_lines.append(
+                f"{call.name}({json.dumps(call.args, ensure_ascii=False, sort_keys=True)})"
+            )
+        return "\n".join(action_lines)
+
+    def _log_react_output(
+        self,
+        step_number: int,
+        response,
+        observation: str,
+    ) -> None:
+        thought = response.thought or response.text
+        logger.info(
+            "步骤 %d：ReAct输出\n思考:\n%s\n动作:\n%s\n观察:\n%s",
+            step_number,
+            self._format_thought_for_log(thought),
+            self._format_action_for_log(response),
+            observation.strip() if observation.strip() else "（空）",
+        )
+
     def _extract_button_name(self, action_name: str, action_params: dict) -> str | None:
         """Extract the button/target name from an action for navigation tracking."""
         if action_name == "poco_click":
@@ -112,11 +138,9 @@ class ReActLoop:
         self,
         page_hash: str,
         perception_data: L1Perception | L2Perception,
-        *,
-        refresh: bool = False,
     ) -> str:
         """Get cached page annotation or create one via LLM."""
-        if self._page_cache.has(page_hash) and not refresh:
+        if self._page_cache.has(page_hash):
             return self._page_cache.to_prompt_text(page_hash)
         try:
             if isinstance(perception_data, L2Perception):
@@ -148,7 +172,10 @@ class ReActLoop:
                 task=task,
                 game_state=perception_text[:500],
             )
-            response = self._gemini.single_prompt(prompt)
+            response = self._gemini.single_prompt(
+                prompt,
+                log_context="task_decomposition",
+            )
             if response.text:
                 sub_goals = json.loads(
                     response.text.strip().strip("`").removeprefix("json").strip()
@@ -270,7 +297,6 @@ class ReActLoop:
             page_context = self._get_page_context(
                 curr_page_hash,
                 perception_data,
-                refresh=use_l2 and force_l2_reason is not None,
             )
 
             prompt_text = prompts.SYSTEM_PROMPT.format(
@@ -306,15 +332,22 @@ class ReActLoop:
                 if self._context.consecutive_failures() >= L2_ESCALATION_FAILURE_THRESHOLD:
                     logger.info("连续失败次数过多，升级到 L2 感知")
                 response = self._gemini.send_multimodal(
-                    prompt_text, perception_data.screenshot_b64
+                    prompt_text,
+                    perception_data.screenshot_b64,
+                    log_context="react",
+                    log_output=False,
                 )
             else:
-                response = self._gemini.send_message(prompt_text)
+                response = self._gemini.send_message(
+                    prompt_text,
+                    log_context="react",
+                    log_output=False,
+                )
 
             logger.info(
-                "步骤 %d：思考=%s",
+                "步骤 %d：模型思考摘要=%s",
                 action_count,
-                self._format_thought_for_log(response.text),
+                self._format_thought_for_log(response.thought or response.text),
             )
 
             if not response.function_calls:
@@ -326,6 +359,11 @@ class ReActLoop:
                     action_count += 1
                     await asyncio.sleep(1.0)
                     continue
+                self._log_react_output(
+                    action_count,
+                    response,
+                    f"任务完成，最终输出：{response.text}",
+                )
                 logger.info("代理已完成任务：%s", response.text)
                 return AgentResult(
                     success=True,
@@ -341,6 +379,11 @@ class ReActLoop:
                 "步骤 %d：动作结果 success=%s，observation=%s",
                 action_count,
                 tool_result.success,
+                tool_result.message,
+            )
+            self._log_react_output(
+                action_count,
+                response,
                 tool_result.message,
             )
 

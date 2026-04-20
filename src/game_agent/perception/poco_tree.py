@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 
 from game_agent.config import PerceptionConfig
 from game_agent.device.base import DeviceController, PocoNode
+from game_agent.graph.hasher import PageHasher
 from game_agent.perception.state import L1Perception
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class PocoTreeExtractor:
     def __init__(self, device: DeviceController, config: PerceptionConfig) -> None:
         self._device = device
         self._config = config
+        self._hasher = PageHasher()
 
     def extract(self) -> L1Perception:
         raw_tree = self._device.get_poco_tree()
@@ -44,9 +45,7 @@ class PocoTreeExtractor:
         )
 
     def compute_hash(self, nodes: list[PocoNode]) -> str:
-        fingerprint_parts = sorted(f"{n.name}:{n.type}" for n in nodes if self._is_structural(n))
-        raw = "|".join(fingerprint_parts)
-        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+        return self._hasher.compute(nodes)
 
     def _is_interactive(self, node: PocoNode) -> bool:
         if node.type in INTERACTIVE_TYPES:

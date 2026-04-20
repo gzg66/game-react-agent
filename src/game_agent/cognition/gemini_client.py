@@ -15,6 +15,7 @@ from game_agent.config import GeminiConfig
 from game_agent.exceptions import GeminiError, GeminiRateLimitError
 
 logger = logging.getLogger(__name__)
+MAX_LOG_CHARS = 4000
 
 try:
     from google import genai
@@ -38,6 +39,7 @@ class GeminiResponse:
     """Parsed response from Gemini."""
 
     text: str | None = None
+    thought: str | None = None
     function_calls: list[FunctionCall] = field(default_factory=list)
     raw_response: Any = None
 
@@ -162,6 +164,54 @@ class GeminiClient:
                 return None
         return FunctionCall(name=fn_name, args=parsed_args)
 
+    @staticmethod
+    def _truncate_for_log(text: str | None, limit: int = MAX_LOG_CHARS) -> str:
+        if text is None:
+            return "（空）"
+        normalized = text.strip()
+        if not normalized:
+            return "（空）"
+        if len(normalized) <= limit:
+            return normalized
+        return normalized[:limit] + "...（已截断）"
+
+    @staticmethod
+    def _format_function_calls_for_log(function_calls: list[FunctionCall]) -> str:
+        if not function_calls:
+            return "（无）"
+        return "\n".join(
+            f"- {call.name}: {json.dumps(call.args, ensure_ascii=False, sort_keys=True)}"
+            for call in function_calls
+        )
+
+    def _log_llm_request(
+        self,
+        context: str,
+        prompt: str,
+        *,
+        system_prompt: str | None,
+        image_bytes: int | None = None,
+    ) -> None:
+        image_desc = "无"
+        if image_bytes is not None:
+            image_desc = f"1 张图片，约 {image_bytes} bytes"
+        logger.info(
+            "LLM调用[%s] 输入\nsystem_prompt:\n%s\nuser_prompt:\n%s\nimage:\n%s",
+            context,
+            self._truncate_for_log(system_prompt),
+            self._truncate_for_log(prompt),
+            image_desc,
+        )
+
+    def _log_llm_response(self, context: str, response: GeminiResponse) -> None:
+        logger.info(
+            "LLM调用[%s] 输出\nthought:\n%s\ntext:\n%s\ntool_calls:\n%s",
+            context,
+            self._truncate_for_log(response.thought),
+            self._truncate_for_log(response.text),
+            self._format_function_calls_for_log(response.function_calls),
+        )
+
     def start_chat(self, system_prompt: str, tools: list[dict] | None = None) -> None:
         if self._client is None:
             raise GeminiError("Gemini 模型尚未初始化")
@@ -217,10 +267,22 @@ class GeminiClient:
             ),
         )
 
-    def send_message(self, content: str, retry_count: int = 3) -> GeminiResponse:
+    def send_message(
+        self,
+        content: str,
+        retry_count: int = 3,
+        *,
+        log_context: str = "chat",
+        log_output: bool = True,
+    ) -> GeminiResponse:
         if not self._system_prompt:
             raise GeminiError("对话尚未启动，请先调用 start_chat()")
 
+        self._log_llm_request(
+            log_context,
+            content,
+            system_prompt=self._system_prompt,
+        )
         for attempt in range(retry_count):
             try:
                 response = self._generate_content(
@@ -229,7 +291,10 @@ class GeminiClient:
                     tools=self._tools,
                     enable_thinking=True,
                 )
-                return self._parse_response(response)
+                parsed = self._parse_response(response)
+                if log_output:
+                    self._log_llm_response(log_context, parsed)
+                return parsed
             except Exception as exc:
                 if self._is_rate_limit_error(exc):
                     wait = 2 ** (attempt + 1)
@@ -242,13 +307,25 @@ class GeminiClient:
         raise GeminiError("重试次数已耗尽")
 
     def send_multimodal(
-        self, text: str, image_b64: str, retry_count: int = 3
+        self,
+        text: str,
+        image_b64: str,
+        retry_count: int = 3,
+        *,
+        log_context: str = "multimodal",
+        log_output: bool = True,
     ) -> GeminiResponse:
         if not self._system_prompt:
             raise GeminiError("对话尚未启动，请先调用 start_chat()")
 
         image_bytes = base64.b64decode(image_b64)
         image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+        self._log_llm_request(
+            log_context,
+            text,
+            system_prompt=self._system_prompt,
+            image_bytes=len(image_bytes),
+        )
 
         for attempt in range(retry_count):
             try:
@@ -258,7 +335,10 @@ class GeminiClient:
                     tools=self._tools,
                     enable_thinking=True,
                 )
-                return self._parse_response(response)
+                parsed = self._parse_response(response)
+                if log_output:
+                    self._log_llm_response(log_context, parsed)
+                return parsed
             except Exception as exc:
                 if self._is_rate_limit_error(exc):
                     wait = 2 ** (attempt + 1)
@@ -270,11 +350,23 @@ class GeminiClient:
                     raise GeminiError(f"Gemini API 调用失败：{exc}") from exc
         raise GeminiError("重试次数已耗尽")
 
-    def single_prompt(self, prompt: str, retry_count: int = 3) -> GeminiResponse:
+    def single_prompt(
+        self,
+        prompt: str,
+        retry_count: int = 3,
+        *,
+        log_context: str = "single_prompt",
+        log_output: bool = True,
+    ) -> GeminiResponse:
         """One-shot prompt without chat context (for annotation, decomposition)."""
         if self._client is None:
             raise GeminiError("Gemini 模型尚未初始化")
 
+        self._log_llm_request(
+            log_context,
+            prompt,
+            system_prompt=None,
+        )
         for attempt in range(retry_count):
             try:
                 response = self._generate_content(
@@ -283,7 +375,10 @@ class GeminiClient:
                     tools=None,
                     response_mime_type=self._config.response_mime_type,
                 )
-                return self._parse_response(response)
+                parsed = self._parse_response(response)
+                if log_output:
+                    self._log_llm_response(log_context, parsed)
+                return parsed
             except Exception as exc:
                 if self._is_rate_limit_error(exc):
                     wait = 2 ** (attempt + 1)
@@ -334,8 +429,11 @@ class GeminiClient:
                 logger.info("从文本 JSON 回退解析到工具调用：%s", fallback_call.name)
                 function_calls.append(fallback_call)
 
+        thought = "\n".join(thought_parts) if thought_parts else None
+
         return GeminiResponse(
             text=text,
+            thought=thought,
             function_calls=function_calls,
             raw_response=response,
         )

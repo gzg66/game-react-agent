@@ -33,14 +33,21 @@ class PageAnnotator:
         prompt = prompts.ANNOTATION_PROMPT.format(
             poco_tree_markdown=perception.poco_tree_markdown
         )
-        response = self._gemini.single_prompt(prompt)
+        response = self._gemini.single_prompt(
+            prompt,
+            log_context="page_annotation",
+        )
         return self._parse_annotation(response.text)
 
     def annotate_with_screenshot(self, perception: L2Perception) -> PageAnnotation:
         prompt = prompts.ANNOTATION_WITH_SCREENSHOT_PROMPT.format(
             poco_tree_markdown=perception.poco_tree_markdown
         )
-        response = self._gemini.send_multimodal(prompt, perception.screenshot_b64)
+        response = self._gemini.send_multimodal(
+            prompt,
+            perception.screenshot_b64,
+            log_context="page_annotation_with_screenshot",
+        )
         return self._parse_annotation(response.text)
 
     def _parse_annotation(self, text: str | None) -> PageAnnotation:

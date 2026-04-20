@@ -31,12 +31,14 @@ class PageKnowledgeCache:
 
     def __init__(self) -> None:
         self._cache: dict[str, PageKnowledge] = {}
+        self._path: Path | None = None
 
     def get(self, page_hash: str) -> PageKnowledge | None:
         return self._cache.get(page_hash)
 
     def put(self, page_hash: str, knowledge: PageKnowledge) -> None:
         self._cache[page_hash] = knowledge
+        self._autosave()
 
     def has(self, page_hash: str) -> bool:
         return page_hash in self._cache
@@ -51,17 +53,30 @@ class PageKnowledgeCache:
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
+        self._path = path
+        self._write_to_path(path)
+        logger.info("页面知识缓存已保存到 %s（%d 个页面）", path, len(self._cache))
+
+    def _write_to_path(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         data: dict[str, Any] = {}
         for page_hash, knowledge in self._cache.items():
             data[page_hash] = asdict(knowledge)
-        path.write_text(
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        temp_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        logger.info("页面知识缓存已保存到 %s（%d 个页面）", path, len(data))
+        temp_path.replace(path)
+
+    def _autosave(self) -> None:
+        if self._path is None:
+            return
+        self._write_to_path(self._path)
+        logger.debug("页面知识缓存已同步写入 %s", self._path)
 
     def load(self, path: str | Path) -> None:
         path = Path(path)
+        self._path = path
         if not path.exists():
             logger.info("页面知识缓存文件不存在，从空状态开始：%s", path)
             return

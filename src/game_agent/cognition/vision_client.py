@@ -11,6 +11,7 @@ from typing import Any
 from game_agent.config import VisionConfig
 
 logger = logging.getLogger(__name__)
+MAX_LOG_CHARS = 4000
 
 try:
     from google import genai
@@ -51,6 +52,33 @@ class VisionLLMClient:
             logger.warning("无法将视觉模型响应解析为 JSON")
             return {"raw_text": raw_text}
 
+    @staticmethod
+    def _truncate_for_log(text: str | None, limit: int = MAX_LOG_CHARS) -> str:
+        if text is None:
+            return "（空）"
+        normalized = text.strip()
+        if not normalized:
+            return "（空）"
+        if len(normalized) <= limit:
+            return normalized
+        return normalized[:limit] + "...（已截断）"
+
+    def _log_llm_exchange(
+        self,
+        context: str,
+        prompt: str,
+        *,
+        image_bytes: int,
+        raw_text: str | None,
+    ) -> None:
+        logger.info(
+            "LLM调用[%s] 输入\nprompt:\n%s\nimage:\n1 张图片，约 %d bytes\n输出:\n%s",
+            context,
+            self._truncate_for_log(prompt),
+            image_bytes,
+            self._truncate_for_log(raw_text),
+        )
+
     def chat(self, prompt: str, image_base64: str) -> str:
         """Send an image (base64) + text prompt to Gemini. Returns raw text."""
         if self._client is None:
@@ -69,7 +97,14 @@ class VisionLLMClient:
                     response_mime_type="application/json",
                 ),
             )
-            return response.text or "{}"
+            raw_text = response.text or "{}"
+            self._log_llm_exchange(
+                "vision_chat",
+                prompt,
+                image_bytes=len(image_bytes),
+                raw_text=raw_text,
+            )
+            return raw_text
         except Exception as exc:
             logger.error("视觉 LLM 请求失败：%s", exc)
             return "{}"
@@ -117,6 +152,12 @@ class VisionLLMClient:
                 ),
             )
             raw_text = response.text or "{}"
+            self._log_llm_exchange(
+                "vision_chat_bytes",
+                prompt,
+                image_bytes=len(image_bytes),
+                raw_text=raw_text,
+            )
             return json.loads(raw_text)
         except json.JSONDecodeError:
             return {"raw_text": response.text}

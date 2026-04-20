@@ -37,4 +37,4 @@ loggers:
 root:
   # 兜底根日志器
   level: INFO
-  handlers: [console]
+  handlers: [console, file]

@@ -3,6 +3,7 @@
 from game_agent.config import PerceptionConfig
 from game_agent.device.base import PocoNode
 from game_agent.device.mock_device import MockDevice, MockScreen
+from game_agent.graph.hasher import PageHasher
 from game_agent.perception.poco_tree import PocoTreeExtractor
 
 
@@ -79,3 +80,15 @@ def test_different_structures_produce_different_hashes():
     ext2 = PocoTreeExtractor(_make_device(nodes2), PerceptionConfig())
 
     assert ext1.extract().page_hash != ext2.extract().page_hash
+
+
+def test_page_hash_matches_page_hasher():
+    nodes = [
+        PocoNode(name="btn_start", type="Button", visible=True),
+        PocoNode(name="tab_main", type="Tab", visible=True),
+        PocoNode(name="txt_gold", type="Text", visible=True),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+    hasher = PageHasher()
+
+    assert extractor.extract().page_hash == hasher.compute(nodes)

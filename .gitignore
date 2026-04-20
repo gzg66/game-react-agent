@@ -24,9 +24,12 @@ dist/
 data/*.log
 
 # Runtime databases and outputs
-data/*.db
+data/*.json
 outputs/
 output/
+scripts/page_screenshots/
+data/page_cache.json
+data/nav_memory.json
 
 # Local IDE and OS files
 .vscode/

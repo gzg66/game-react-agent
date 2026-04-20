@@ -31,4 +31,6 @@ def setup_logging(
         logging.basicConfig(level=logging.INFO, encoding="utf-8")
 
     if level_override:
-        logging.getLogger("game_agent").setLevel(getattr(logging, level_override.upper(), logging.INFO))
+        level = getattr(logging, level_override.upper(), logging.INFO)
+        logging.getLogger("game_agent").setLevel(level)
+        logging.getLogger().setLevel(level)

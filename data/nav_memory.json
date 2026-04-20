@@ -1,86 +1,188 @@
 {
-  "1abfd5d43e2383fb|touch(0.43,0.95)": {
-    "result_page_hash": "1abfd5d43e2383fb",
+  "e72588df65df7741|btnLogin": {
+    "result_page_hash": "9d9c5525b31ee06a",
     "times_tried": 2,
-    "effective": false,
-    "last_tried": 1776513269.0641246
+    "effective": true,
+    "last_tried": 1776655543.3260744
   },
-  "1abfd5d43e2383fb|touch(0.22,0.78)": {
-    "result_page_hash": "1abfd5d43e2383fb",
+  "9d9c5525b31ee06a|btnStartGame": {
+    "result_page_hash": "8a7523035d751828",
     "times_tried": 2,
-    "effective": false,
-    "last_tried": 1776513277.2478602
-  },
-  "1abfd5d43e2383fb|touch(0.75,0.95)": {
-    "result_page_hash": "34b546cf4ad4745b",
-    "times_tried": 5,
     "effective": true,
-    "last_tried": 1776513623.520253
+    "last_tried": 1776655549.2086794
   },
-  "f2a3fbcd282b42c5|touch(0.43,0.95)": {
-    "result_page_hash": "da63b234f472a57e",
-    "times_tried": 4,
+  "8a2b635f3bdb989b|btnTrack": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
     "effective": true,
-    "last_tried": 1776513583.374944
+    "last_tried": 1776654665.003948
   },
-  "1abfd5d43e2383fb|touch(0.92,0.95)": {
-    "result_page_hash": "38940ee954ba2ed3",
+  "1abfd5d43e2383fb|touch(0.82,0.48)": {
+    "result_page_hash": "f41c8d165614c544",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654677.1384485
+  },
+  "d832fa73b156e2ef|btnChallenge": {
+    "result_page_hash": "7f70c9c5e2a39de1",
     "times_tried": 3,
     "effective": true,
-    "last_tried": 1776513644.9367132
+    "last_tried": 1776654821.5754106
   },
-  "db738afb3f0019e9|touch(0.91,0.12)": {
-    "result_page_hash": "1abfd5d43e2383fb",
+  "cbffb4b7293d9c5f|btnFight": {
+    "result_page_hash": "022c0ddc98705637",
     "times_tried": 2,
     "effective": true,
-    "last_tried": 1776513614.1146011
+    "last_tried": 1776654783.6159432
   },
-  "1abfd5d43e2383fb|touch(0.08,0.78)": {
-    "result_page_hash": "ac296166df7bfa15",
+  "022c0ddc98705637|btnOccupy": {
+    "result_page_hash": "022c0ddc98705637",
+    "times_tried": 1,
+    "effective": false,
+    "last_tried": 1776654719.3028579
+  },
+  "022c0ddc98705637|touch(0.92,0.87)": {
+    "result_page_hash": "022c0ddc98705637",
+    "times_tried": 1,
+    "effective": false,
+    "last_tried": 1776654729.7887132
+  },
+  "022c0ddc98705637|touch(0.92,0.82)": {
+    "result_page_hash": "0666095dad70295b",
     "times_tried": 3,
     "effective": true,
-    "last_tried": 1776513666.799475
+    "last_tried": 1776654798.2509434
   },
-  "32a3a500c1edfaa9|touch(0.80,0.20)": {
-    "result_page_hash": "1abfd5d43e2383fb",
+  "eff0cef55e1e882a|touch(0.50,0.94)": {
+    "result_page_hash": "d832fa73b156e2ef",
     "times_tried": 1,
     "effective": true,
-    "last_tried": 1776513295.7663045
+    "last_tried": 1776654758.9416013
   },
-  "ba3938a65b4b0b7c|touch(0.92,0.36)": {
-    "result_page_hash": "ba3938a65b4b0b7c",
+  "e5dc35d636b934c6|btnSkip": {
+    "result_page_hash": "cbffb4b7293d9c5f",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654775.4348938
+  },
+  "0666095dad70295b|btnOption2": {
+    "result_page_hash": "d832fa73b156e2ef",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654815.8888254
+  },
+  "7f70c9c5e2a39de1|btnFight": {
+    "result_page_hash": "e9df33894d3c0dc4",
+    "times_tried": 2,
+    "effective": true,
+    "last_tried": 1776654897.7962947
+  },
+  "e9df33894d3c0dc4|touch(0.92,0.82)": {
+    "result_page_hash": "e9df33894d3c0dc4",
+    "times_tried": 2,
+    "effective": false,
+    "last_tried": 1776654909.9368234
+  },
+  "5345ad3d504fc8cf|btnOccupy": {
+    "result_page_hash": "b6708484a2820455",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654865.7358654
+  },
+  "b6708484a2820455|btnChallenge": {
+    "result_page_hash": "7f70c9c5e2a39de1",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654878.5682526
+  },
+  "7f70c9c5e2a39de1|touch(0.50,0.50)": {
+    "result_page_hash": "7f70c9c5e2a39de1",
     "times_tried": 1,
     "effective": false,
-    "last_tried": 1776513564.1105957
+    "last_tried": 1776654889.7996283
   },
-  "ba3938a65b4b0b7c|handbookBtn": {
-    "result_page_hash": "f2a3fbcd282b42c5",
-    "times_tried": 1,
-    "effective": true,
-    "last_tried": 1776513569.7159693
-  },
-  "32a3a500c1edfaa9|touch(0.80,0.19)": {
-    "result_page_hash": "1abfd5d43e2383fb",
-    "times_tried": 1,
-    "effective": true,
-    "last_tried": 1776513602.8975127
-  },
-  "f2a3fbcd282b42c5|btnMainLine": {
-    "result_page_hash": "1abfd5d43e2383fb",
-    "times_tried": 1,
-    "effective": true,
-    "last_tried": 1776513635.1366575
-  },
-  "db738afb3f0019e9|touch(0.22,0.78)": {
-    "result_page_hash": "db738afb3f0019e9",
-    "times_tried": 1,
+  "e9df33894d3c0dc4|touch(0.92,0.87)": {
+    "result_page_hash": "e9df33894d3c0dc4",
+    "times_tried": 2,
     "effective": false,
-    "last_tried": 1776513657.6854293
+    "last_tried": 1776654933.3951988
   },
-  "db738afb3f0019e9|touch(0.10,0.95)": {
+  "f4749289791df46d|touch(0.50,0.85)": {
+    "result_page_hash": "f59fe0c8ead5daba",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654945.0451784
+  },
+  "f59fe0c8ead5daba|btnOccupy": {
+    "result_page_hash": "f59fe0c8ead5daba",
+    "times_tried": 2,
+    "effective": false,
+    "last_tried": 1776654971.7105668
+  },
+  "f59fe0c8ead5daba|touch(0.50,0.94)": {
+    "result_page_hash": "b6708484a2820455",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654977.7727408
+  },
+  "b6708484a2820455|closeButton": {
+    "result_page_hash": "19654667a93612f9",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776654986.0358424
+  },
+  "19654667a93612f9|btnSkip": {
     "result_page_hash": "1abfd5d43e2383fb",
     "times_tried": 1,
     "effective": true,
-    "last_tried": 1776513663.503328
+    "last_tried": 1776654994.9555178
+  },
+  "1abfd5d43e2383fb|touch(0.08,0.05)": {
+    "result_page_hash": "deed3a6ad8e62396",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655000.4931338
+  },
+  "49678a1878aa54df|touch(0.82,0.89)": {
+    "result_page_hash": "49678a1878aa54df",
+    "times_tried": 3,
+    "effective": false,
+    "last_tried": 1776655036.06331
+  },
+  "49678a1878aa54df|touch(0.75,0.80)": {
+    "result_page_hash": "ab37a004cb62fd96",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655046.3645737
+  },
+  "d38e03f167e9d814|touch(0.84,0.77)": {
+    "result_page_hash": "97e84de0d5f3540a",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655058.362745
+  },
+  "97e84de0d5f3540a|touch(0.84,0.78)": {
+    "result_page_hash": "75fd69d2adfcceeb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655080.2364078
+  },
+  "75fd69d2adfcceeb|btnLevelUp": {
+    "result_page_hash": "fe368147e77468cf",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655097.8824923
+  },
+  "125e15d4377698e6|touch(0.50,0.90)": {
+    "result_page_hash": "b9eefa075c088c3e",
+    "times_tried": 2,
+    "effective": true,
+    "last_tried": 1776655368.7469752
+  },
+  "2d3a90035267bf62|btnTrack": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776655561.0100324
   }
 }
