@@ -27,8 +27,7 @@ class UIDiffCalculator:
 
         is_loading = (
             has_visual_state
-            and
-            not hash_changed
+            and not hash_changed
             and not added
             and not removed
             and ssim > (1.0 - self._config.diff_threshold)

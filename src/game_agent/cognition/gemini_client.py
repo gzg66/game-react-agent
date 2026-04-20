@@ -121,6 +121,15 @@ class GeminiClient:
                 if inline_call is not None:
                     return inline_call
 
+        # Fallback: scan for inline action call pattern like "动作：poco_click(...)"
+        inline_match = re.search(
+            r"(?:动作|action)\s*[:：]\s*([a-zA-Z_]\w*\(.*?\))", text, flags=re.S
+        )
+        if inline_match:
+            inline_call = GeminiClient._parse_inline_action_call(inline_match.group(1))
+            if inline_call is not None:
+                return inline_call
+
         return None
 
     @staticmethod
@@ -165,6 +174,7 @@ class GeminiClient:
         tools: list[dict] | None = None,
         system_instruction: str | None = None,
         response_mime_type: str | None = None,
+        enable_thinking: bool = False,
     ) -> Any:
         config_kwargs: dict[str, Any] = {
             "temperature": self._config.temperature,
@@ -176,6 +186,13 @@ class GeminiClient:
             config_kwargs["response_mime_type"] = response_mime_type
         if tools:
             config_kwargs["tools"] = tools
+        if enable_thinking and HAS_GENAI:
+            try:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    include_thoughts=True,
+                )
+            except Exception:
+                pass
         return types.GenerateContentConfig(**config_kwargs)
 
     def _generate_content(
@@ -185,6 +202,7 @@ class GeminiClient:
         system_prompt: str | None,
         tools: list[dict] | None,
         response_mime_type: str | None = None,
+        enable_thinking: bool = False,
     ) -> Any:
         if self._client is None:
             raise GeminiError("Gemini 模型尚未初始化")
@@ -195,6 +213,7 @@ class GeminiClient:
                 tools=tools,
                 system_instruction=system_prompt,
                 response_mime_type=response_mime_type,
+                enable_thinking=enable_thinking,
             ),
         )
 
@@ -208,6 +227,7 @@ class GeminiClient:
                     content,
                     system_prompt=self._system_prompt,
                     tools=self._tools,
+                    enable_thinking=True,
                 )
                 return self._parse_response(response)
             except Exception as exc:
@@ -236,6 +256,7 @@ class GeminiClient:
                     [text, image_part],
                     system_prompt=self._system_prompt,
                     tools=self._tools,
+                    enable_thinking=True,
                 )
                 return self._parse_response(response)
             except Exception as exc:
@@ -276,6 +297,7 @@ class GeminiClient:
 
     def _parse_response(self, response: Any) -> GeminiResponse:
         text_parts: list[str] = []
+        thought_parts: list[str] = []
         function_calls: list[FunctionCall] = []
 
         try:
@@ -285,19 +307,25 @@ class GeminiClient:
                         FunctionCall(name=fc.name, args=dict(fc.args or {}))
                     )
 
-            if getattr(response, "text", None):
-                text_parts.append(response.text)
-            elif getattr(response, "candidates", None):
+            if getattr(response, "candidates", None):
                 for part in response.candidates[0].content.parts:
-                    if hasattr(part, "function_call") and part.function_call.name:
+                    if hasattr(part, "thought") and part.thought and hasattr(part, "text") and part.text:
+                        thought_parts.append(part.text)
+                    elif hasattr(part, "function_call") and part.function_call is not None and part.function_call.name:
                         fc = part.function_call
-                        function_calls.append(
-                            FunctionCall(name=fc.name, args=dict(fc.args))
-                        )
+                        if FunctionCall(name=fc.name, args=dict(fc.args or {})) not in function_calls:
+                            function_calls.append(
+                                FunctionCall(name=fc.name, args=dict(fc.args or {}))
+                            )
                     elif hasattr(part, "text") and part.text:
                         text_parts.append(part.text)
+            elif getattr(response, "text", None):
+                text_parts.append(response.text)
         except (IndexError, AttributeError) as exc:
             logger.warning("解析 Gemini 响应失败：%s", exc)
+
+        if thought_parts and not text_parts:
+            text_parts = thought_parts
 
         text = "\n".join(text_parts) if text_parts else None
         if not function_calls:

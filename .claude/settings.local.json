@@ -16,7 +16,15 @@
       "Bash(.venv/Scripts/python.exe scripts/explore_cold_start.py --config config/xttc_poco.yaml --max-steps 3)",
       "Bash(.venv/Scripts/python.exe scripts/explore_cold_start.py --mock)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)",
-      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('scripts/explore_cold_start.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('scripts/explore_cold_start.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(PYTHONPATH=src python -m pytest tests/ -v --tb=long)",
+      "Bash(PYTHONPATH=src python -m pytest tests/test_cognition/test_context.py -v --tb=long)",
+      "Bash(echo \"DONE $?\")",
+      "Bash(pip show *)",
+      "Bash(uv run *)"
     ]
   }
 }

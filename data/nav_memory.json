@@ -1,0 +1,86 @@
+{
+  "1abfd5d43e2383fb|touch(0.43,0.95)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 2,
+    "effective": false,
+    "last_tried": 1776513269.0641246
+  },
+  "1abfd5d43e2383fb|touch(0.22,0.78)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 2,
+    "effective": false,
+    "last_tried": 1776513277.2478602
+  },
+  "1abfd5d43e2383fb|touch(0.75,0.95)": {
+    "result_page_hash": "34b546cf4ad4745b",
+    "times_tried": 5,
+    "effective": true,
+    "last_tried": 1776513623.520253
+  },
+  "f2a3fbcd282b42c5|touch(0.43,0.95)": {
+    "result_page_hash": "da63b234f472a57e",
+    "times_tried": 4,
+    "effective": true,
+    "last_tried": 1776513583.374944
+  },
+  "1abfd5d43e2383fb|touch(0.92,0.95)": {
+    "result_page_hash": "38940ee954ba2ed3",
+    "times_tried": 3,
+    "effective": true,
+    "last_tried": 1776513644.9367132
+  },
+  "db738afb3f0019e9|touch(0.91,0.12)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 2,
+    "effective": true,
+    "last_tried": 1776513614.1146011
+  },
+  "1abfd5d43e2383fb|touch(0.08,0.78)": {
+    "result_page_hash": "ac296166df7bfa15",
+    "times_tried": 3,
+    "effective": true,
+    "last_tried": 1776513666.799475
+  },
+  "32a3a500c1edfaa9|touch(0.80,0.20)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776513295.7663045
+  },
+  "ba3938a65b4b0b7c|touch(0.92,0.36)": {
+    "result_page_hash": "ba3938a65b4b0b7c",
+    "times_tried": 1,
+    "effective": false,
+    "last_tried": 1776513564.1105957
+  },
+  "ba3938a65b4b0b7c|handbookBtn": {
+    "result_page_hash": "f2a3fbcd282b42c5",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776513569.7159693
+  },
+  "32a3a500c1edfaa9|touch(0.80,0.19)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776513602.8975127
+  },
+  "f2a3fbcd282b42c5|btnMainLine": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776513635.1366575
+  },
+  "db738afb3f0019e9|touch(0.22,0.78)": {
+    "result_page_hash": "db738afb3f0019e9",
+    "times_tried": 1,
+    "effective": false,
+    "last_tried": 1776513657.6854293
+  },
+  "db738afb3f0019e9|touch(0.10,0.95)": {
+    "result_page_hash": "1abfd5d43e2383fb",
+    "times_tried": 1,
+    "effective": true,
+    "last_tried": 1776513663.503328
+  }
+}

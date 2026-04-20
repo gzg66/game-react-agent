@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from game_agent.cognition.context import ContextManager
 from game_agent.cognition.gemini_client import GeminiClient
+from game_agent.cognition.navigation_memory import NavigationMemory
+from game_agent.cognition.page_cache import PageKnowledgeCache
 from game_agent.cognition.react_loop import ReActLoop
 from game_agent.config import load_config, load_env_file
 from game_agent.device.mock_device import MockDevice, MockScreen
@@ -134,16 +136,31 @@ async def main() -> None:
 
     context = ContextManager(window_size=config.context.window_size)
 
+    nav_memory = NavigationMemory(
+        ineffective_threshold=config.navigation_memory.ineffective_threshold,
+    )
+    nav_memory.load(config.navigation_memory.file_path)
+
+    page_cache = PageKnowledgeCache()
+    page_cache.load(config.page_cache.file_path)
+
     gemini = GeminiClient(config.gemini)
-    react_loop = ReActLoop(gemini, registry, perception, context, ui_diff, config)
+    react_loop = ReActLoop(
+        gemini, registry, perception, context, ui_diff, config,
+        navigation_memory=nav_memory,
+        page_cache=page_cache,
+    )
 
     logger.info("智能体已初始化，可用工具：%s", registry.list_tools())
+    logger.info("导航记忆：%d 条，页面缓存：%d 个", len(nav_memory), len(page_cache))
 
     if args.task:
         result = await react_loop.run(args.task, max_steps=args.max_steps)
         print(f"\n结果：{'成功' if result.success else '失败'}")
         print(f"步数：{result.total_steps}")
         print(f"说明：{result.final_message}")
+        nav_memory.save(config.navigation_memory.file_path)
+        page_cache.save(config.page_cache.file_path)
     else:
         print("游戏 ReAct 智能体 - 交互模式")
         print("请输入任务，输入 `退出` 可结束；同时兼容 `quit`、`exit`、`q`。\n")
@@ -157,6 +174,8 @@ async def main() -> None:
             result = await react_loop.run(task, max_steps=args.max_steps)
             print(f"\n{'成功' if result.success else '失败'}：{result.final_message}")
             print(f"（共 {result.total_steps} 步）\n")
+            nav_memory.save(config.navigation_memory.file_path)
+            page_cache.save(config.page_cache.file_path)
 
     storage.close()
 

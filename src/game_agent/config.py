@@ -114,6 +114,16 @@ class ContextConfig(BaseModel):
     window_size: int = 10
 
 
+class NavigationMemoryConfig(BaseModel):
+    file_path: str = "data/nav_memory.json"
+    ineffective_threshold: int = 2
+    staleness_threshold: int = 5
+
+
+class PageCacheConfig(BaseModel):
+    file_path: str = "data/page_cache.json"
+
+
 class AppConfig(BaseModel):
     device: DeviceConfig = DeviceConfig()
     game: GameConnectionConfig = GameConnectionConfig()
@@ -124,6 +134,8 @@ class AppConfig(BaseModel):
     perception: PerceptionConfig = PerceptionConfig()
     graph: GraphConfig = GraphConfig()
     context: ContextConfig = ContextConfig()
+    navigation_memory: NavigationMemoryConfig = NavigationMemoryConfig()
+    page_cache: PageCacheConfig = PageCacheConfig()
     log_level: str = "INFO"
 
 
