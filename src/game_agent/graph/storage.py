@@ -198,5 +198,38 @@ class GraphStorage:
 
         return self.load_graph()
 
+    def delete_last_edge(self) -> GraphEdge | None:
+        row = self._conn.execute(
+            "SELECT id, source_id, target_id, discovered_at, success_count, failure_count "
+            "FROM edges ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return None
+        edge_id = row["id"]
+        actions = []
+        for ar in self._conn.execute(
+            "SELECT action_type, target, params FROM edge_actions "
+            "WHERE edge_id = ? ORDER BY action_order",
+            (edge_id,),
+        ):
+            actions.append(
+                EdgeAction(
+                    action_type=ar["action_type"],
+                    target=ar["target"],
+                    params=json.loads(ar["params"]),
+                )
+            )
+        self._conn.execute("DELETE FROM edge_actions WHERE edge_id = ?", (edge_id,))
+        self._conn.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
+        self._conn.commit()
+        return GraphEdge(
+            source_id=row["source_id"],
+            target_id=row["target_id"],
+            actions=actions,
+            discovered_at=row["discovered_at"],
+            success_count=row["success_count"],
+            failure_count=row["failure_count"],
+        )
+
     def close(self) -> None:
         self._conn.close()
