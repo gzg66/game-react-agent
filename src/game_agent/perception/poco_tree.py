@@ -33,9 +33,10 @@ class PocoTreeExtractor:
 
     def extract(self) -> L1Perception:
         raw_tree = self._device.get_poco_tree()
+        visible_nodes = [n for n in raw_tree if n.visible]
         filtered = [n for n in raw_tree if n.visible and self._is_interactive(n)]
         filtered = self._filter_obscured(raw_tree, filtered)
-        markdown = self._to_markdown(filtered)
+        markdown = self._to_full_markdown(visible_nodes)
         page_hash = self.compute_hash(filtered)
         return L1Perception(
             timestamp=time.time(),
@@ -46,6 +47,12 @@ class PocoTreeExtractor:
 
     def compute_hash(self, nodes: list[PocoNode]) -> str:
         return self._hasher.compute(nodes)
+
+    def extract_visible_tree_markdown(self) -> str:
+        """Return markdown for all visible UI nodes without interaction filtering."""
+        raw_tree = self._device.get_poco_tree()
+        visible_nodes = [n for n in raw_tree if n.visible]
+        return self._to_full_markdown(visible_nodes)
 
     def _is_interactive(self, node: PocoNode) -> bool:
         if node.type in INTERACTIVE_TYPES:
@@ -121,5 +128,21 @@ class PocoTreeExtractor:
             text_part = f' "{n.text}"' if n.text else ""
             lines.append(
                 f"- [{n.type}] {n.name}{text_part} (位置: {n.pos[0]:.2f}, {n.pos[1]:.2f})"
+            )
+        return "\n".join(lines)
+
+    def _to_full_markdown(self, nodes: list[PocoNode]) -> str:
+        lines = []
+        for n in nodes:
+            text_part = f' text="{n.text}"' if n.text else ""
+            lines.append(
+                "- "
+                f"[{n.type}] {n.name or '（空名称）'}"
+                f"{text_part}"
+                f" visible={n.visible}"
+                f" pos=({n.pos[0]:.2f}, {n.pos[1]:.2f})"
+                f" size=({n.size[0]:.2f}, {n.size[1]:.2f})"
+                f" children={n.children_count}"
+                f" path={n.poco_path or '（空路径）'}"
             )
         return "\n".join(lines)

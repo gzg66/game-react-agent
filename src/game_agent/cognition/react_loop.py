@@ -248,6 +248,18 @@ class ReActLoop:
         best_score = candidates[0][0]
         return [h for score, h in candidates if score == best_score]
 
+    @staticmethod
+    def _parse_touch_button(button: str) -> tuple[float, float] | None:
+        """Parse 'touch(x,y)' into (x, y) floats, or return None."""
+        if not button.startswith("touch(") or not button.endswith(")"):
+            return None
+        try:
+            inner = button[6:-1]
+            x_str, y_str = inner.split(",")
+            return float(x_str), float(y_str)
+        except (ValueError, IndexError):
+            return None
+
     def _find_nav_path(
         self, start_hash: str, goal_hashes: set[str],
     ) -> list[tuple[str, str]] | None:
@@ -262,8 +274,6 @@ class ReActLoop:
         while queue:
             current, path = queue.popleft()
             for button, target in self._nav_memory.get_known_transitions(current).items():
-                if button.startswith("touch("):
-                    continue
                 new_path = path + [(button, target)]
                 if target in goal_hashes:
                     return new_path
@@ -289,7 +299,13 @@ class ReActLoop:
 
         current_hash = start_hash
         for i, (button, expected_target) in enumerate(path):
-            tool_result = self._tools.execute("poco_click", {"poco_path": button})
+            touch_coords = self._parse_touch_button(button)
+            if touch_coords is not None:
+                tool_result = self._tools.execute(
+                    "airtest_touch_pos", {"x": touch_coords[0], "y": touch_coords[1]},
+                )
+            else:
+                tool_result = self._tools.execute("poco_click", {"poco_path": button})
             if not tool_result.success:
                 logger.warning("快速导航中断（步骤 %d）：点击 %s 失败", i, button)
                 return None

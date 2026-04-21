@@ -43,8 +43,55 @@ def test_markdown_format():
     device = _make_device(nodes)
     extractor = PocoTreeExtractor(device, PerceptionConfig())
     result = extractor.extract()
-    assert '- [Button] btn_hero "Heroes"' in result.poco_tree_markdown
-    assert "(位置: 0.10, 0.90)" in result.poco_tree_markdown
+    assert '[Button] btn_hero text="Heroes"' in result.poco_tree_markdown
+    assert "pos=(0.10, 0.90)" in result.poco_tree_markdown
+
+
+def test_extract_visible_tree_markdown_keeps_all_visible_nodes():
+    nodes = [
+        PocoNode(
+            name="btn_hero",
+            type="Button",
+            text="Heroes",
+            visible=True,
+            pos=(0.1, 0.9),
+            size=(0.2, 0.1),
+            children_count=1,
+            poco_path="Root > MainPanel > btn_hero",
+        ),
+        PocoNode(
+            name="bg_image",
+            type="Image",
+            visible=True,
+            pos=(0.5, 0.5),
+            size=(1.0, 1.0),
+            poco_path="Root > MainPanel > bg_image",
+        ),
+        PocoNode(name="hidden_tip", type="Text", visible=False, pos=(0.2, 0.2)),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+
+    markdown = extractor.extract_visible_tree_markdown()
+
+    assert "[Button] btn_hero" in markdown
+    assert "[Image] bg_image" in markdown
+    assert "hidden_tip" not in markdown
+    assert "path=Root > MainPanel > btn_hero" in markdown
+
+
+def test_extract_uses_full_visible_tree_markdown():
+    nodes = [
+        PocoNode(name="btn_action", type="Button", visible=True, poco_path="Root > btn_action"),
+        PocoNode(name="bg_image", type="Image", visible=True, poco_path="Root > bg_image"),
+        PocoNode(name="hidden_tip", type="Text", visible=False, poco_path="Root > hidden_tip"),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+
+    result = extractor.extract()
+
+    assert "[Button] btn_action" in result.poco_tree_markdown
+    assert "[Image] bg_image" in result.poco_tree_markdown
+    assert "hidden_tip" not in result.poco_tree_markdown
 
 
 def test_page_hash_stability():

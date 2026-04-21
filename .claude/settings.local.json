@@ -24,7 +24,10 @@
       "Bash(PYTHONPATH=src python -m pytest tests/test_cognition/test_context.py -v --tb=long)",
       "Bash(echo \"DONE $?\")",
       "Bash(pip show *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(echo \"RC=$?\")",
+      "Bash(where python *)",
+      "Bash(D:/workspace/game-react-agent/.venv/Scripts/python.exe *)"
     ]
   }
 }

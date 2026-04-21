@@ -154,10 +154,6 @@ def main() -> int:
         args.screenshot_dir,
     )
 
-    print(f"page_hash={snapshot.page_hash}")
-    print(f"interactive_nodes={len(snapshot.interactive_nodes)}")
-    print(f"screenshot={screenshot_path}")
-
     if args.show_nodes:
         print("nodes:")
         for node in snapshot.interactive_nodes:
@@ -167,6 +163,10 @@ def main() -> int:
     if args.show_markdown:
         print("\nmarkdown:")
         print(snapshot.poco_tree_markdown or "（空）")
+
+    print(f"========================={snapshot.page_hash}=============================")
+    print(f"interactive_nodes={len(snapshot.interactive_nodes)}")
+    print(f"screenshot={screenshot_path}")
 
     return 0
 
