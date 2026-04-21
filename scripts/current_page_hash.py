@@ -37,9 +37,12 @@ def _ensure_utf8_console() -> None:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="获取当前游戏页面的 page hash")
-    parser.add_argument("--config", default=None, help="配置 YAML 路径")
-    parser.add_argument("--mock", action="store_true", help="使用模拟设备")
+    parser = argparse.ArgumentParser(
+        description="获取当前游戏页面的 page hash",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--config", default="./config/xttc_poco.yaml", help="配置 YAML 路径")
+    parser.add_argument("--mock", action="store_true", default=False, help="使用模拟设备")
     parser.add_argument("--device-uri", default=None, help="显式指定 Airtest 设备 URI")
     parser.add_argument("--serial", default=None, help="显式指定设备串号")
     parser.add_argument(
@@ -50,12 +53,26 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--show-markdown",
         action="store_true",
+        default=True,
         help="额外输出当前页面的交互节点 Markdown",
     )
     parser.add_argument(
         "--show-nodes",
         action="store_true",
+        default=True,
         help="额外输出当前页面的交互节点明细",
+    )
+    parser.add_argument(
+        "--hide-markdown",
+        action="store_false",
+        dest="show_markdown",
+        help="不输出当前页面的交互节点 Markdown",
+    )
+    parser.add_argument(
+        "--hide-nodes",
+        action="store_false",
+        dest="show_nodes",
+        help="不输出当前页面的交互节点明细",
     )
     return parser
 

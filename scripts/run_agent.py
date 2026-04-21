@@ -82,15 +82,18 @@ def create_mock_scenario() -> list[MockScreen]:
 async def main() -> None:
     _ensure_utf8_console()
     load_env_file(_PROJECT_ROOT / ".env")
-    parser = argparse.ArgumentParser(description="游戏 ReAct 智能体")
-    parser.add_argument("--config", default=None, help="配置 YAML 路径")
-    parser.add_argument("--mock", action="store_true", help="使用模拟设备")
+    parser = argparse.ArgumentParser(
+        description="游戏 ReAct 智能体",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--config", default="./config/xttc_poco.yaml", help="配置 YAML 路径")
+    parser.add_argument("--mock", action="store_true", default=False, help="使用模拟设备")
     parser.add_argument(
         "--no-restart-game",
         action="store_true",
         help="真实设备模式下启动前不重启游戏",
     )
-    parser.add_argument("--task", default=None, help="要执行的任务")
+    parser.add_argument("--task", default=None, help="要执行的任务；留空时进入交互输入模式")
     parser.add_argument("--max-steps", type=int, default=50, help="ReAct 最大步数")
     args = parser.parse_args()
 
