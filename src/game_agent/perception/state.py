@@ -15,6 +15,7 @@ class L1Perception:
     poco_tree_markdown: str
     interactive_nodes: list[PocoNode]
     page_hash: str
+    all_visible_nodes: list[PocoNode] = field(default_factory=list)
 
 
 @dataclass

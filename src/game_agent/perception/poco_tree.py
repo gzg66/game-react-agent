@@ -43,6 +43,7 @@ class PocoTreeExtractor:
             poco_tree_markdown=markdown,
             interactive_nodes=filtered,
             page_hash=page_hash,
+            all_visible_nodes=visible_nodes,
         )
 
     def compute_hash(self, nodes: list[PocoNode]) -> str:

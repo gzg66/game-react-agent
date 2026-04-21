@@ -22,9 +22,11 @@ class ToolResult:
 # --- Atomic tool input schemas ---
 
 class PocoClickInput(BaseModel):
-    """按 Poco 路径点击界面元素。"""
+    """按节点名称点击界面元素。"""
 
-    poco_path: str = Field(description="目标界面节点的 Poco 路径")
+    node_name: str = Field(
+        description="目标按钮或节点名称（如 btnLogin、btnStartGame），无需完整路径"
+    )
 
 
 class AirtestTouchPosInput(BaseModel):

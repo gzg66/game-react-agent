@@ -2,6 +2,7 @@
 
 from game_agent.device.base import PocoNode
 from game_agent.device.mock_device import MockDevice, MockScreen
+from game_agent.perception.ui_tree_store import UITreeStore
 from game_agent.tools.atomic import airtest_touch_pos, poco_click, swipe, wait_for_node
 from game_agent.tools.schemas import (
     AirtestTouchPosInput,
@@ -11,23 +12,59 @@ from game_agent.tools.schemas import (
 )
 
 
-def test_poco_click_success():
+def _make_store_with_nodes(tmp_path, nodes, page_hash="test_page"):
+    store = UITreeStore(str(tmp_path / "ui_trees"))
+    store.update(page_hash, nodes)
+    return store
+
+
+def test_poco_click_success_by_name(tmp_path):
     device = MockDevice()
     device.load_scenario(
-        [MockScreen(node_existence={"btn_hero": True})]
+        [MockScreen(node_existence={"btnLogin": True})]
     )
-    result = poco_click(device, PocoClickInput(poco_path="btn_hero"))
+    nodes = [
+        PocoNode(
+            name="btnLogin", type="Button", visible=True,
+            pos=(0.67, 0.57), poco_path="Scene > GRoot > btnLogin",
+        ),
+    ]
+    store = _make_store_with_nodes(tmp_path, nodes)
+    result = poco_click(device, store, PocoClickInput(node_name="btnLogin"))
     assert result.success is True
-    assert "btn_hero" in result.message
+    assert "btnLogin" in result.message
 
 
-def test_poco_click_not_found():
+def test_poco_click_fallback_to_coordinates(tmp_path):
+    """When Poco name query fails, fall back to coordinate touch."""
     device = MockDevice()
     device.load_scenario(
-        [MockScreen(node_existence={"btn_hero": False})]
+        [MockScreen(node_existence={"btnLogin": False})]
     )
-    result = poco_click(device, PocoClickInput(poco_path="btn_hero"))
+    nodes = [
+        PocoNode(
+            name="btnLogin", type="Button", visible=True,
+            pos=(0.67, 0.57), poco_path="Scene > GRoot > btnLogin",
+        ),
+    ]
+    store = _make_store_with_nodes(tmp_path, nodes)
+    result = poco_click(device, store, PocoClickInput(node_name="btnLogin"))
+    assert result.success is True
+    assert "坐标" in result.message
+    assert "0.67" in result.message
+
+
+def test_poco_click_not_found_anywhere(tmp_path):
+    """Node not in store and not in device → failure."""
+    device = MockDevice()
+    device.load_scenario(
+        [MockScreen(node_existence={"btnLogin": False})]
+    )
+    store = UITreeStore(str(tmp_path / "ui_trees"))
+    store.update("page1", [])
+    result = poco_click(device, store, PocoClickInput(node_name="btnLogin"))
     assert result.success is False
+    assert "未找到" in result.message
 
 
 def test_airtest_touch_pos():

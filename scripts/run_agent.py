@@ -25,6 +25,7 @@ from game_agent.graph.storage import GraphStorage
 from game_agent.logging_setup import setup_logging
 from game_agent.perception.provider import DefaultPerceptionProvider
 from game_agent.perception.ui_diff import UIDiffCalculator
+from game_agent.perception.ui_tree_store import UITreeStore
 from game_agent.tools.atomic import build_atomic_tools
 from game_agent.tools.macros import build_macro_tools
 from game_agent.tools.registry import ToolRegistry
@@ -129,8 +130,10 @@ async def main() -> None:
     graph = storage.load_graph()
     navigator = GraphNavigator(graph)
 
+    ui_tree_store = UITreeStore("data/ui_trees")
+
     registry = ToolRegistry()
-    for name, (fn, schema, desc) in build_atomic_tools(device).items():
+    for name, (fn, schema, desc) in build_atomic_tools(device, ui_tree_store).items():
         registry.register(name, fn, schema, desc)
     for name, (fn, schema, desc) in build_macro_tools(
         device, graph, navigator, perception.tree_extractor
@@ -152,6 +155,7 @@ async def main() -> None:
         gemini, registry, perception, context, ui_diff, config,
         navigation_memory=nav_memory,
         page_cache=page_cache,
+        ui_tree_store=ui_tree_store,
     )
 
     logger.info("智能体已初始化，可用工具：%s", registry.list_tools())

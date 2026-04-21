@@ -1,6 +1,7 @@
 """Tests for the tool registry."""
 
 from game_agent.device.mock_device import MockDevice, MockScreen
+from game_agent.perception.ui_tree_store import UITreeStore
 from game_agent.tools.atomic import build_atomic_tools
 from game_agent.tools.registry import ToolRegistry
 from game_agent.tools.schemas import PocoClickInput, ToolResult
@@ -21,10 +22,10 @@ def test_registry_execute():
     registry = ToolRegistry()
     registry.register(
         "test_tool",
-        lambda params: ToolResult(success=True, message=f"clicked {params.poco_path}"),
+        lambda params: ToolResult(success=True, message=f"clicked {params.node_name}"),
         PocoClickInput,
     )
-    result = registry.execute("test_tool", {"poco_path": "btn_hero"})
+    result = registry.execute("test_tool", {"node_name": "btn_hero"})
     assert result.success is True
     assert "btn_hero" in result.message
 
@@ -47,14 +48,16 @@ def test_registry_execute_invalid_params():
     assert result.success is False
 
 
-def test_registry_build_atomic_tools():
+def test_registry_build_atomic_tools(tmp_path):
     device = MockDevice()
     device.load_scenario([MockScreen(node_existence={"btn_hero": True})])
+    ui_tree_store = UITreeStore(str(tmp_path / "ui_trees"))
+    ui_tree_store.update("page1", [])
     registry = ToolRegistry()
-    for name, (fn, schema, desc) in build_atomic_tools(device).items():
+    for name, (fn, schema, desc) in build_atomic_tools(device, ui_tree_store).items():
         registry.register(name, fn, schema, desc)
     assert len(registry.list_tools()) == 4
-    result = registry.execute("poco_click", {"poco_path": "btn_hero"})
+    result = registry.execute("poco_click", {"node_name": "btn_hero"})
     assert result.success is True
 
 
@@ -63,6 +66,8 @@ def test_registry_gemini_tools_format():
     registry.register("test", lambda p: ToolResult(True, "ok"), PocoClickInput, "test")
     tools = registry.get_gemini_tools()
     assert len(tools) == 1
-    assert tools[0]["name"] == "test"
-    assert "parameters" in tools[0]
-    assert "properties" in tools[0]["parameters"]
+    declarations = tools[0]["function_declarations"]
+    assert len(declarations) == 1
+    assert declarations[0]["name"] == "test"
+    assert "parameters" in declarations[0]
+    assert "properties" in declarations[0]["parameters"]

@@ -21,6 +21,7 @@ from game_agent.graph.annotator import PageAnnotator
 from game_agent.perception.base import PerceptionProvider
 from game_agent.perception.state import L1Perception, L2Perception
 from game_agent.perception.ui_diff import UIDiffCalculator
+from game_agent.perception.ui_tree_store import UITreeStore
 from game_agent.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class ReActLoop:
         config: AppConfig,
         navigation_memory: NavigationMemory | None = None,
         page_cache: PageKnowledgeCache | None = None,
+        ui_tree_store: UITreeStore | None = None,
     ) -> None:
         self._gemini = gemini
         self._tools = tool_registry
@@ -64,6 +66,7 @@ class ReActLoop:
         self._config = config
         self._nav_memory = navigation_memory if navigation_memory is not None else NavigationMemory()
         self._page_cache = page_cache if page_cache is not None else PageKnowledgeCache()
+        self._ui_tree_store = ui_tree_store if ui_tree_store is not None else UITreeStore()
         self._annotator = PageAnnotator(gemini)
         self._staleness_threshold = getattr(
             config, "navigation_memory", None
@@ -128,7 +131,7 @@ class ReActLoop:
     def _extract_button_name(self, action_name: str, action_params: dict) -> str | None:
         """Extract the button/target name from an action for navigation tracking."""
         if action_name == "poco_click":
-            return action_params.get("poco_path")
+            return action_params.get("node_name") or action_params.get("poco_path")
         if action_name == "airtest_touch_pos":
             x = action_params.get("x", 0)
             y = action_params.get("y", 0)
@@ -305,7 +308,7 @@ class ReActLoop:
                     "airtest_touch_pos", {"x": touch_coords[0], "y": touch_coords[1]},
                 )
             else:
-                tool_result = self._tools.execute("poco_click", {"poco_path": button})
+                tool_result = self._tools.execute("poco_click", {"node_name": button})
             if not tool_result.success:
                 logger.warning("快速导航中断（步骤 %d）：点击 %s 失败", i, button)
                 return None
@@ -323,6 +326,7 @@ class ReActLoop:
                     if actual_hash == expected_target:
                         break
 
+            self._ui_tree_store.update(actual_hash, l1.all_visible_nodes)
             self._nav_memory.record(current_hash, button, actual_hash)
 
             if actual_hash != expected_target:
@@ -352,6 +356,7 @@ class ReActLoop:
 
         initial_perception = self._perception.capture_l1()
         start_hash = self._perception.to_state(initial_perception).page_hash[:16]
+        self._ui_tree_store.update(start_hash, initial_perception.all_visible_nodes)
 
         fast_result = await self._try_fast_path(task, start_hash)
         if fast_result is not None:
@@ -376,6 +381,7 @@ class ReActLoop:
             l1_perception = self._perception.capture_l1()
             curr_state = self._perception.to_state(l1_perception)
             curr_page_hash = curr_state.page_hash[:16]
+            self._ui_tree_store.update(curr_page_hash, l1_perception.all_visible_nodes)
             logger.info(
                 "步骤 %d：页面=%s，可交互节点=%d",
                 action_count,

@@ -30,6 +30,7 @@ output/
 scripts/page_screenshots/
 data/page_cache.json
 data/nav_memory.json
+data/ui_trees/
 
 # Local IDE and OS files
 .vscode/
