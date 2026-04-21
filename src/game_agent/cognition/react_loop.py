@@ -389,6 +389,35 @@ class ReActLoop:
                 len(l1_perception.interactive_nodes),
             )
 
+            # --- Guide shortcut: detect finger-effect in Poco tree, skip LLM ---
+            if l1_perception.guide_node is not None:
+                guide = l1_perception.guide_node
+                logger.info(
+                    "步骤 %d：L1 引导检测命中，直接点击 %s @ (%.2f, %.2f)",
+                    action_count, guide.poco_path, *guide.pos,
+                )
+                gx, gy = guide.pos
+                tool_result = self._tools.execute(
+                    "airtest_touch_pos", {"x": gx, "y": gy},
+                )
+                step = ReActStep(
+                    step_number=action_count,
+                    thought="L1 引导检测：发现引导手指特效节点，直接跟随点击",
+                    action_name="guide_click",
+                    action_params={"x": gx, "y": gy, "path": guide.poco_path},
+                    observation=tool_result.message,
+                    timestamp=time.time(),
+                    page_hash=curr_page_hash,
+                )
+                self._context.add_step(step)
+                self._nav_memory.record(
+                    curr_page_hash, f"guide@({gx:.2f},{gy:.2f})", curr_page_hash,
+                )
+                action_count += 1
+                force_l2_reason = None
+                await asyncio.sleep(0.3)
+                continue
+
             stale_count = self._context.page_stale_count()
             is_cycling = self._context.cycle_detected(
                 min_cycle_length=2, min_repetitions=CYCLE_DETECTION_MIN_REPETITIONS,

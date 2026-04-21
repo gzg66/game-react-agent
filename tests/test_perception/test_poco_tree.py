@@ -139,3 +139,47 @@ def test_page_hash_matches_page_hasher():
     hasher = PageHasher()
 
     assert extractor.extract().page_hash == hasher.compute(nodes)
+
+
+def test_detect_guide_returns_node_when_present():
+    nodes = [
+        PocoNode(name="btn_start", type="Button", visible=True, pos=(0.5, 0.5)),
+        PocoNode(
+            name="GLoader3D",
+            type="GLoader3D",
+            visible=True,
+            pos=(0.3, 0.7),
+            poco_path="Scene > GRoot > Guide > Container > GLoader3D",
+        ),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+    result = extractor.extract()
+    assert result.guide_node is not None
+    assert result.guide_node.name == "GLoader3D"
+    assert result.guide_node.pos == (0.3, 0.7)
+    assert result.guide_node in result.interactive_nodes
+
+
+def test_detect_guide_returns_none_when_absent():
+    nodes = [
+        PocoNode(name="btn_start", type="Button", visible=True, pos=(0.5, 0.5)),
+        PocoNode(name="bg_image", type="Image", visible=True, pos=(0.5, 0.5)),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+    result = extractor.extract()
+    assert result.guide_node is None
+
+
+def test_detect_guide_ignores_gloader3d_outside_guide_path():
+    nodes = [
+        PocoNode(
+            name="GLoader3D",
+            type="GLoader3D",
+            visible=True,
+            pos=(0.5, 0.5),
+            poco_path="Scene > GRoot > Container > GLoader3D",
+        ),
+    ]
+    extractor = PocoTreeExtractor(_make_device(nodes), PerceptionConfig())
+    result = extractor.extract()
+    assert result.guide_node is None

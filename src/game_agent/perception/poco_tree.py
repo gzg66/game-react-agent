@@ -38,12 +38,16 @@ class PocoTreeExtractor:
         filtered = self._filter_obscured(raw_tree, filtered)
         markdown = self._to_full_markdown(visible_nodes)
         page_hash = self.compute_hash(filtered)
+        guide = self._detect_guide(visible_nodes)
+        if guide is not None and guide not in filtered:
+            filtered.append(guide)
         return L1Perception(
             timestamp=time.time(),
             poco_tree_markdown=markdown,
             interactive_nodes=filtered,
             page_hash=page_hash,
             all_visible_nodes=visible_nodes,
+            guide_node=guide,
         )
 
     def compute_hash(self, nodes: list[PocoNode]) -> str:
@@ -65,6 +69,21 @@ class PocoTreeExtractor:
         if not node.name:
             return False
         return node.type in INTERACTIVE_TYPES or bool(node.name.strip())
+
+    @staticmethod
+    def _detect_guide(visible_nodes: list[PocoNode]) -> PocoNode | None:
+        """Detect a FairyGUI guide finger-effect node in the Poco tree.
+
+        Matches visible nodes whose path contains a "Guide" segment and
+        whose name is "GLoader3D" — the 3-D loader used for the finger
+        animation overlay.
+        """
+        for node in visible_nodes:
+            parts = node.poco_path.split(" > ")
+            if "Guide" in parts and node.name == "GLoader3D":
+                logger.info("L1 引导节点检测命中：%s @ (%.2f, %.2f)", node.poco_path, *node.pos)
+                return node
+        return None
 
     def _filter_obscured(
         self, all_nodes: list[PocoNode], interactive: list[PocoNode]

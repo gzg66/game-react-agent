@@ -16,6 +16,7 @@ class L1Perception:
     interactive_nodes: list[PocoNode]
     page_hash: str
     all_visible_nodes: list[PocoNode] = field(default_factory=list)
+    guide_node: PocoNode | None = None
 
 
 @dataclass
