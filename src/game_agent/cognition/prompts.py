@@ -68,7 +68,7 @@ ANNOTATION_PROMPT = """\
 
 要求：
 - 所有字段值（除节点原生 name 外）必须使用中文。
-- 只提取 `visible` 为 true 且在屏幕可视范围（pos 在 0~1 之间）内的关键交互节点。
+- 只提取 `visible` 为 true 的关键交互节点。
 - 只返回严格的 JSON 格式，不要补充任何额外的说明文字或 Markdown 代码块标记。
 
 ## UI 树
