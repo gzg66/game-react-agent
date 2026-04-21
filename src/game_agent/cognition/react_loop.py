@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 from game_agent.cognition import prompts
@@ -225,15 +226,129 @@ class ReActLoop:
                 lines.append(line)
         return "\n".join(lines)
 
+    # ---- Fast navigation (skip LLM when cached graph has a path) ----
+
+    def _find_goal_pages(self, task: str, exclude_hash: str) -> list[str]:
+        """Find candidate goal pages by matching task text against cached page names.
+
+        Only returns the pages with the *best* overlap score to avoid BFS
+        stopping at a weakly-matching intermediate page.
+        """
+        candidates: list[tuple[int, str]] = []
+        for page_hash, knowledge in self._page_cache.items():
+            if page_hash == exclude_hash:
+                continue
+            name = knowledge.page_name
+            overlap = sum(1 for c in name if c in task and c not in "的了在是和与")
+            if overlap >= 2:
+                candidates.append((overlap, page_hash))
+        if not candidates:
+            return []
+        candidates.sort(reverse=True)
+        best_score = candidates[0][0]
+        return [h for score, h in candidates if score == best_score]
+
+    def _find_nav_path(
+        self, start_hash: str, goal_hashes: set[str],
+    ) -> list[tuple[str, str]] | None:
+        """BFS shortest path from *start_hash* to any page in *goal_hashes*.
+
+        Returns list of (button_name, target_page_hash), or None if unreachable.
+        """
+        if start_hash in goal_hashes:
+            return []
+        queue: deque[tuple[str, list[tuple[str, str]]]] = deque([(start_hash, [])])
+        visited = {start_hash}
+        while queue:
+            current, path = queue.popleft()
+            for button, target in self._nav_memory.get_known_transitions(current).items():
+                if button.startswith("touch("):
+                    continue
+                new_path = path + [(button, target)]
+                if target in goal_hashes:
+                    return new_path
+                if target not in visited:
+                    visited.add(target)
+                    queue.append((target, new_path))
+        return None
+
+    async def _try_fast_path(self, task: str, start_hash: str) -> AgentResult | None:
+        """Navigate to the goal using the cached nav graph — zero LLM calls."""
+        goal_pages = self._find_goal_pages(task, start_hash)
+        if not goal_pages:
+            return None
+        path = self._find_nav_path(start_hash, set(goal_pages))
+        if not path:
+            return None
+
+        goal_knowledge = self._page_cache.get(path[-1][1])
+        goal_name = goal_knowledge.page_name if goal_knowledge else path[-1][1][:8]
+        logger.info(
+            "快速导航：发现 %d 步缓存路径 → 「%s」", len(path), goal_name,
+        )
+
+        current_hash = start_hash
+        for i, (button, expected_target) in enumerate(path):
+            tool_result = self._tools.execute("poco_click", {"poco_path": button})
+            if not tool_result.success:
+                logger.warning("快速导航中断（步骤 %d）：点击 %s 失败", i, button)
+                return None
+
+            await asyncio.sleep(0.3)
+
+            l1 = self._perception.capture_l1()
+            actual_hash = self._perception.to_state(l1).page_hash[:16]
+
+            if actual_hash != expected_target:
+                for _ in range(POST_ACTION_LOADING_RETRIES):
+                    await asyncio.sleep(POST_ACTION_LOADING_WAIT_S)
+                    l1 = self._perception.capture_l1()
+                    actual_hash = self._perception.to_state(l1).page_hash[:16]
+                    if actual_hash == expected_target:
+                        break
+
+            self._nav_memory.record(current_hash, button, actual_hash)
+
+            if actual_hash != expected_target:
+                logger.warning(
+                    "快速导航中断（步骤 %d）：页面不匹配（预期=%s 实际=%s）",
+                    i, expected_target[:8], actual_hash[:8],
+                )
+                return None
+
+            logger.info("快速导航步骤 %d：%s → %s ✓", i, button, actual_hash[:8])
+            current_hash = actual_hash
+
+        final_msg = f"快速导航完成：已到达「{goal_name}」"
+        logger.info(final_msg)
+        return AgentResult(
+            success=True,
+            steps=[],
+            final_message=final_msg,
+            total_steps=len(path),
+        )
+
+    # ---- Main ReAct loop ----
+
     async def run(self, task: str, max_steps: int = 50) -> AgentResult:
         """Execute a task through iterative ReAct reasoning."""
         self._context.clear()
+
+        initial_perception = self._perception.capture_l1()
+        start_hash = self._perception.to_state(initial_perception).page_hash[:16]
+
+        fast_result = await self._try_fast_path(task, start_hash)
+        if fast_result is not None:
+            return fast_result
+
+        # Fast path unavailable — fall back to full ReAct loop.
+        # Re-capture in case fast path partially changed state.
+        initial_perception = self._perception.capture_l1()
+
         self._gemini.start_chat(
             system_prompt=prompts.STATIC_SYSTEM_INSTRUCTION,
             tools=self._tools.get_gemini_tools(),
         )
-
-        initial_perception = self._perception.capture_l1()
         sub_goals = self._decompose_task(
             task, initial_perception.poco_tree_markdown
         )
@@ -431,15 +546,27 @@ class ReActLoop:
                         button_name,
                         curr_page_hash[:8],
                     )
-                    force_l2_reason = (
-                        "上一步点击后页面结构未发生变化，但游戏内可能出现了纯视觉引导。"
-                        "请结合截图重点检查是否有手指动画、箭头、高亮描边、聚光遮罩或被教程强调的点击目标。"
-                    )
+                    if not self._page_cache.has(curr_page_hash):
+                        force_l2_reason = (
+                            "上一步点击后页面结构未发生变化，但游戏内可能出现了纯视觉引导。"
+                            "请结合截图重点检查是否有手指动画、箭头、高亮描边、聚光遮罩或被教程强调的点击目标。"
+                        )
+                    else:
+                        logger.info(
+                            "页面 %s 已在缓存中，跳过视觉引导检测",
+                            curr_page_hash[:8],
+                        )
                 elif fc.name in ("poco_click", "airtest_touch_pos"):
-                    force_l2_reason = (
-                        "上一步点击后页面结构已变化。请结合截图确认新页面是否处于新手教程或强引导状态，"
-                        "若有手指、箭头或高亮提示，优先跟随其指向的区域。"
-                    )
+                    if not self._page_cache.has(post_page_hash):
+                        force_l2_reason = (
+                            "上一步点击后页面结构已变化。请结合截图确认新页面是否处于新手教程或强引导状态，"
+                            "若有手指、箭头或高亮提示，优先跟随其指向的区域。"
+                        )
+                    else:
+                        logger.info(
+                            "目标页面 %s 已在缓存中，跳过强制 L2 感知",
+                            post_page_hash[:8],
+                        )
 
             action_count += 1
 

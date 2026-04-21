@@ -43,6 +43,10 @@ class PageKnowledgeCache:
     def has(self, page_hash: str) -> bool:
         return page_hash in self._cache
 
+    def items(self) -> list[tuple[str, PageKnowledge]]:
+        """Return all cached (page_hash, knowledge) pairs."""
+        return list(self._cache.items())
+
     def to_prompt_text(self, page_hash: str) -> str:
         k = self._cache.get(page_hash)
         if k is None:

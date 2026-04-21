@@ -65,6 +65,7 @@ class AirtestDevice(DeviceController):
             self._config.poco_host,
             self._config.effective_poco_port(),
         )
+        self._warmup_touch()
 
     def reconnect(self) -> None:
         """Reconnect after RPC failure."""
@@ -74,6 +75,7 @@ class AirtestDevice(DeviceController):
         self._ensure_poco_forward()
         self._poco = self._create_poco()
         logger.info("已重新连接到 %s", self._config.device_serial)
+        self._warmup_touch()
 
     def _create_poco(self) -> Any:
         engine = self._config.engine_type
@@ -138,6 +140,22 @@ class AirtestDevice(DeviceController):
         if port <= 0 or self._config.engine_type == ENGINE_ANDROID_UIAUTOMATION:
             return
         self._adb_cmd("forward", f"tcp:{port}", f"tcp:{port}")
+
+    def _warmup_touch(self) -> None:
+        """Eagerly initialize Airtest touch subsystem (rotationwatcher + maxtouch)."""
+        dev = self._device
+        if dev is None:
+            return
+        try:
+            if hasattr(dev, "display_info"):
+                _ = dev.display_info
+            if hasattr(dev, "minitouch"):
+                _ = dev.minitouch
+            elif hasattr(dev, "touch_proxy"):
+                _ = dev.touch_proxy
+            logger.info("Airtest 触控子系统预热完成")
+        except Exception as exc:
+            logger.debug("Airtest 触控预热跳过：%s", exc)
 
     # ---- DeviceController implementation ----
 
