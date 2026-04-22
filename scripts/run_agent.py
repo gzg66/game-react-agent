@@ -136,7 +136,8 @@ async def main() -> None:
     for name, (fn, schema, desc) in build_atomic_tools(device, ui_tree_store).items():
         registry.register(name, fn, schema, desc)
     for name, (fn, schema, desc) in build_macro_tools(
-        device, graph, navigator, perception.tree_extractor
+        device, graph, navigator, perception.tree_extractor,
+        ui_tree_store=ui_tree_store,
     ).items():
         registry.register(name, fn, schema, desc)
 

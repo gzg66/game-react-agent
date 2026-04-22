@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
+import time
 
-from game_agent.device.base import DeviceController
+from game_agent.device.base import DeviceController, PocoNode
 from game_agent.graph.models import UIStateGraph
 from game_agent.graph.navigator import GraphNavigator
+from game_agent.perception.occlusion import (
+    ScrollVector,
+    check_occlusion,
+    compute_scroll_to_reveal,
+)
 from game_agent.perception.poco_tree import PocoTreeExtractor
-from game_agent.tools.schemas import ClearAllPopupsInput, MapsToInput, ToolResult
+from game_agent.perception.ui_tree_store import UITreeStore
+from game_agent.tools.schemas import ClearAllPopupsInput, MapsToInput, SmartClickInput, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +103,145 @@ def clear_all_popups(device: DeviceController, params: ClearAllPopupsInput) -> T
     )
 
 
+def _find_node_in_tree(nodes: list[PocoNode], name: str) -> PocoNode | None:
+    """Resolve a node by name, path suffix, or display text."""
+    for node in nodes:
+        if node.name == name:
+            return node
+    suffix = f" > {name}"
+    for node in nodes:
+        if node.poco_path.endswith(suffix):
+            return node
+    for node in nodes:
+        if node.text and node.text == name:
+            return node
+    return None
+
+
+_SMART_CLICK_MAX_ATTEMPTS = 5
+_SMART_CLICK_SCROLL_STEP = 0.25
+_SMART_CLICK_POST_SCROLL_WAIT_S = 1.0
+_SMART_CLICK_BLIND_SCROLL_LIMIT = 2
+_DEFAULT_BLIND_SCROLL = ScrollVector(
+    start=(0.5, 0.65), end=(0.5, 0.40), description="盲滑：默认向上滑动",
+)
+
+
+def smart_click(
+    device: DeviceController,
+    ui_tree_store: UITreeStore,
+    params: SmartClickInput,
+) -> ToolResult:
+    """Click a node with automatic occlusion detection and scroll-to-reveal.
+
+    FSM states:
+      A — fetch tree & find node (blind-scroll if missing)
+      B — occlusion analysis
+      C — compute scroll vector & swipe
+      D — safe click
+    """
+    blind_scrolls = 0
+
+    for attempt in range(_SMART_CLICK_MAX_ATTEMPTS):
+        # --- State A: fetch tree, find target ---
+        all_nodes = device.get_poco_tree()
+        visible_nodes = [n for n in all_nodes if n.visible]
+        target = _find_node_in_tree(visible_nodes, params.node_name)
+
+        if target is None:
+            # Also try the UITreeStore cache (may hold nodes from last perception)
+            target = ui_tree_store.resolve(params.node_name)
+
+        if target is None:
+            if blind_scrolls >= _SMART_CLICK_BLIND_SCROLL_LIMIT:
+                return ToolResult(
+                    success=False,
+                    message=(
+                        f"经过 {blind_scrolls} 次盲滑后仍未找到节点「{params.node_name}」"
+                    ),
+                )
+            logger.info(
+                "smart_click：未找到「%s」，执行盲滑（第 %d 次）",
+                params.node_name,
+                blind_scrolls + 1,
+            )
+            device.swipe(
+                start=_DEFAULT_BLIND_SCROLL.start,
+                end=_DEFAULT_BLIND_SCROLL.end,
+                duration=0.5,
+            )
+            time.sleep(_SMART_CLICK_POST_SCROLL_WAIT_S)
+            blind_scrolls += 1
+            continue
+
+        # --- State B: occlusion analysis ---
+        occlusion = check_occlusion(target, visible_nodes)
+
+        if not occlusion.is_occluded:
+            # --- State D: safe click ---
+            x, y = target.pos
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                bbox = occlusion.target_bbox
+                if bbox is not None:
+                    x = max(0.0, min(1.0, bbox.center_x))
+                    y = max(0.0, min(1.0, bbox.center_y))
+            result = device.click((x, y))
+            return ToolResult(
+                success=result.success,
+                message=(
+                    f"智能点击成功：「{params.node_name}」@ ({x:.2f}, {y:.2f})，"
+                    f"共尝试 {attempt + 1} 次"
+                ),
+                data={"x": x, "y": y, "attempts": attempt + 1},
+            )
+
+        # --- large-popup guard ---
+        if occlusion.is_large_popup:
+            return ToolResult(
+                success=False,
+                message=(
+                    f"目标「{params.node_name}」被大型弹窗遮挡"
+                    f"（覆盖率 {occlusion.coverage_ratio:.0%}），"
+                    "建议先调用 clear_all_popups 清除弹窗"
+                ),
+            )
+
+        # --- State C: compute scroll & swipe ---
+        scroll = compute_scroll_to_reveal(
+            target, occlusion, _SMART_CLICK_SCROLL_STEP,
+        )
+        if scroll is None:
+            scroll = _DEFAULT_BLIND_SCROLL
+
+        logger.info(
+            "smart_click[%d/%d]：%s (%.2f,%.2f)->(%.2f,%.2f)",
+            attempt + 1,
+            _SMART_CLICK_MAX_ATTEMPTS,
+            scroll.description,
+            *scroll.start,
+            *scroll.end,
+        )
+        device.swipe(start=scroll.start, end=scroll.end, duration=0.5)
+        time.sleep(_SMART_CLICK_POST_SCROLL_WAIT_S)
+
+    return ToolResult(
+        success=False,
+        message=(
+            f"已尝试 {_SMART_CLICK_MAX_ATTEMPTS} 次滑动，"
+            f"仍无法安全点击「{params.node_name}」"
+        ),
+    )
+
+
 def build_macro_tools(
     device: DeviceController,
     graph: UIStateGraph,
     navigator: GraphNavigator,
     tree_extractor: PocoTreeExtractor,
+    ui_tree_store: UITreeStore | None = None,
 ) -> dict[str, tuple]:
     """Return macro tools for registry registration."""
-    return {
+    tools: dict[str, tuple] = {
         "maps_to": (
             lambda params: maps_to(device, graph, navigator, tree_extractor, params),
             MapsToInput,
@@ -115,3 +253,14 @@ def build_macro_tools(
             "关闭当前可见的所有弹窗",
         ),
     }
+    if ui_tree_store is not None:
+        tools["smart_click"] = (
+            lambda params: smart_click(device, ui_tree_store, params),
+            SmartClickInput,
+            (
+                "智能点击：自动检测节点是否被遮挡或在屏幕外，"
+                "若是则自动滑动使其可见后再点击。"
+                "适用于长列表、滚动视图、底栏遮挡等场景"
+            ),
+        )
+    return tools

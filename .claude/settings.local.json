@@ -27,7 +27,13 @@
       "Bash(uv run *)",
       "Bash(echo \"RC=$?\")",
       "Bash(where python *)",
-      "Bash(D:/workspace/game-react-agent/.venv/Scripts/python.exe *)"
+      "Bash(D:/workspace/game-react-agent/.venv/Scripts/python.exe *)",
+      "Bash(PYTHONPATH=src python *)",
+      "Bash(PYTHONPATH=D:/workspace/game-react-agent/src python -c \"from game_agent.perception.occlusion import check_occlusion; print\\('OK'\\)\")",
+      "Bash(pip --version)",
+      "Bash(.venv/Scripts/python.exe -c \"import sys; sys.path.insert\\(0,'src'\\); from game_agent.perception.occlusion import check_occlusion, compute_scroll_to_reveal, BoundingBox; from game_agent.tools.schemas import SmartClickInput; print\\('All imports OK'\\); print\\('SmartClickInput fields:', list\\(SmartClickInput.model_fields.keys\\(\\)\\)\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_perception/test_occlusion.py tests/test_tools/test_smart_click.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)"
     ]
   }
 }

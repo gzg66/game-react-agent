@@ -59,6 +59,14 @@ class MapsToInput(BaseModel):
     target_node_id: str = Field(description="要导航到的图节点 ID（页面哈希）")
 
 
+class SmartClickInput(BaseModel):
+    """智能点击：自动检测目标节点是否被遮挡或在屏幕外，若是则自动滑动使其可见后再点击。"""
+
+    node_name: str = Field(
+        description="目标节点名称或显示文本（如 btnChallenge、挑战）"
+    )
+
+
 class ClearAllPopupsInput(BaseModel):
     """关闭所有可见弹窗或对话框。"""
 
