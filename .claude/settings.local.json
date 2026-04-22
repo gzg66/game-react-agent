@@ -33,7 +33,8 @@
       "Bash(pip --version)",
       "Bash(.venv/Scripts/python.exe -c \"import sys; sys.path.insert\\(0,'src'\\); from game_agent.perception.occlusion import check_occlusion, compute_scroll_to_reveal, BoundingBox; from game_agent.tools.schemas import SmartClickInput; print\\('All imports OK'\\); print\\('SmartClickInput fields:', list\\(SmartClickInput.model_fields.keys\\(\\)\\)\\)\")",
       "Bash(.venv/Scripts/python.exe -m pytest tests/test_perception/test_occlusion.py tests/test_tools/test_smart_click.py -v)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)"
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python.exe *)"
     ]
   }
 }

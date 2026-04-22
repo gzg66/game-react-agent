@@ -121,11 +121,18 @@ def _find_node_in_tree(nodes: list[PocoNode], name: str) -> PocoNode | None:
 _SMART_CLICK_MAX_ATTEMPTS = 5
 _SMART_CLICK_SCROLL_STEP = 0.25
 _SMART_CLICK_POST_SCROLL_WAIT_S = 1.0
+_SMART_CLICK_VERIFY_WAIT_S = 0.5
 _SMART_CLICK_BLIND_SCROLL_LIMIT = 2
-_SMART_CLICK_POPUP_SCROLL_LIMIT = 2
 _DEFAULT_BLIND_SCROLL = ScrollVector(
     start=(0.5, 0.65), end=(0.5, 0.40), description="盲滑：默认向上滑动",
 )
+
+
+def _tree_changed(before: list[PocoNode], after: list[PocoNode]) -> bool:
+    """Check whether the visible node set changed between two tree snapshots."""
+    pre = {n.name for n in before if n.visible}
+    post = {n.name for n in after if n.visible}
+    return pre != post
 
 
 def smart_click(
@@ -133,26 +140,21 @@ def smart_click(
     ui_tree_store: UITreeStore,
     params: SmartClickInput,
 ) -> ToolResult:
-    """Click a node with automatic occlusion detection and scroll-to-reveal.
+    """Click a node with post-click verification and scroll fallback.
 
-    FSM states:
-      A — fetch tree & find node (blind-scroll if missing)
-      B — occlusion analysis
-      C — compute scroll vector & swipe
-      D — safe click
-      E — large-popup: scroll to escape, give up after limit
+    1. Find target → if on-screen, click it
+    2. Verify: re-read tree → if changed, click worked → return success
+    3. If unchanged (blocked) or off-screen → scroll to reveal → retry
     """
     blind_scrolls = 0
-    popup_scrolls = 0
 
     for attempt in range(_SMART_CLICK_MAX_ATTEMPTS):
-        # --- State A: fetch tree, find target ---
+        # --- Phase 1: fetch tree, find target ---
         all_nodes = device.get_poco_tree()
         visible_nodes = [n for n in all_nodes if n.visible]
         target = _find_node_in_tree(visible_nodes, params.node_name)
 
         if target is None:
-            # Also try the UITreeStore cache (may hold nodes from last perception)
             target = ui_tree_store.resolve(params.node_name)
 
         if target is None:
@@ -177,54 +179,38 @@ def smart_click(
             blind_scrolls += 1
             continue
 
-        # --- State B: occlusion analysis ---
-        occlusion = check_occlusion(target, visible_nodes)
+        # --- Phase 2: try clicking if target center is on-screen ---
+        x, y = target.pos
+        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+            cx = max(0.02, min(0.98, x))
+            cy = max(0.02, min(0.98, y))
+            device.click((cx, cy))
 
-        if not occlusion.is_occluded:
-            # --- State D: safe click ---
-            x, y = target.pos
-            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
-                bbox = occlusion.target_bbox
-                if bbox is not None:
-                    x = max(0.0, min(1.0, bbox.center_x))
-                    y = max(0.0, min(1.0, bbox.center_y))
-            result = device.click((x, y))
-            return ToolResult(
-                success=result.success,
-                message=(
-                    f"智能点击成功：「{params.node_name}」@ ({x:.2f}, {y:.2f})，"
-                    f"共尝试 {attempt + 1} 次"
-                ),
-                data={"x": x, "y": y, "attempts": attempt + 1},
-            )
+            time.sleep(_SMART_CLICK_VERIFY_WAIT_S)
+            post_nodes = device.get_poco_tree()
+            post_visible = [n for n in post_nodes if n.visible]
 
-        # --- State E: large-popup — scroll before giving up ---
-        if occlusion.is_large_popup:
-            if popup_scrolls >= _SMART_CLICK_POPUP_SCROLL_LIMIT:
+            if _tree_changed(visible_nodes, post_visible):
                 return ToolResult(
-                    success=False,
+                    success=True,
                     message=(
-                        f"目标「{params.node_name}」被大型弹窗遮挡"
-                        f"（覆盖率 {occlusion.coverage_ratio:.0%}），"
-                        "建议先调用 clear_all_popups 清除弹窗"
+                        f"智能点击成功：「{params.node_name}」@ ({cx:.2f}, {cy:.2f})，"
+                        f"共尝试 {attempt + 1} 次"
                     ),
+                    data={"x": cx, "y": cy, "attempts": attempt + 1},
                 )
+
             logger.info(
-                "smart_click[%d/%d]：疑似大型遮挡，尝试滑动规避（第 %d 次）",
+                "smart_click[%d/%d]：点击 (%0.2f, %0.2f) 后 UI 未变化，"
+                "判定被遮挡，尝试滑动",
                 attempt + 1,
                 _SMART_CLICK_MAX_ATTEMPTS,
-                popup_scrolls + 1,
+                cx,
+                cy,
             )
-            device.swipe(
-                start=_DEFAULT_BLIND_SCROLL.start,
-                end=_DEFAULT_BLIND_SCROLL.end,
-                duration=0.5,
-            )
-            time.sleep(_SMART_CLICK_POST_SCROLL_WAIT_S)
-            popup_scrolls += 1
-            continue
 
-        # --- State C: compute scroll & swipe ---
+        # --- Phase 3: scroll to reveal (off-screen or click was blocked) ---
+        occlusion = check_occlusion(target, visible_nodes)
         scroll = compute_scroll_to_reveal(
             target, occlusion, _SMART_CLICK_SCROLL_STEP,
         )
@@ -245,7 +231,7 @@ def smart_click(
     return ToolResult(
         success=False,
         message=(
-            f"已尝试 {_SMART_CLICK_MAX_ATTEMPTS} 次滑动，"
+            f"已尝试 {_SMART_CLICK_MAX_ATTEMPTS} 次，"
             f"仍无法安全点击「{params.node_name}」"
         ),
     )
