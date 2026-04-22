@@ -122,6 +122,7 @@ _SMART_CLICK_MAX_ATTEMPTS = 5
 _SMART_CLICK_SCROLL_STEP = 0.25
 _SMART_CLICK_POST_SCROLL_WAIT_S = 1.0
 _SMART_CLICK_BLIND_SCROLL_LIMIT = 2
+_SMART_CLICK_POPUP_SCROLL_LIMIT = 2
 _DEFAULT_BLIND_SCROLL = ScrollVector(
     start=(0.5, 0.65), end=(0.5, 0.40), description="盲滑：默认向上滑动",
 )
@@ -139,8 +140,10 @@ def smart_click(
       B — occlusion analysis
       C — compute scroll vector & swipe
       D — safe click
+      E — large-popup: scroll to escape, give up after limit
     """
     blind_scrolls = 0
+    popup_scrolls = 0
 
     for attempt in range(_SMART_CLICK_MAX_ATTEMPTS):
         # --- State A: fetch tree, find target ---
@@ -195,16 +198,31 @@ def smart_click(
                 data={"x": x, "y": y, "attempts": attempt + 1},
             )
 
-        # --- large-popup guard ---
+        # --- State E: large-popup — scroll before giving up ---
         if occlusion.is_large_popup:
-            return ToolResult(
-                success=False,
-                message=(
-                    f"目标「{params.node_name}」被大型弹窗遮挡"
-                    f"（覆盖率 {occlusion.coverage_ratio:.0%}），"
-                    "建议先调用 clear_all_popups 清除弹窗"
-                ),
+            if popup_scrolls >= _SMART_CLICK_POPUP_SCROLL_LIMIT:
+                return ToolResult(
+                    success=False,
+                    message=(
+                        f"目标「{params.node_name}」被大型弹窗遮挡"
+                        f"（覆盖率 {occlusion.coverage_ratio:.0%}），"
+                        "建议先调用 clear_all_popups 清除弹窗"
+                    ),
+                )
+            logger.info(
+                "smart_click[%d/%d]：疑似大型遮挡，尝试滑动规避（第 %d 次）",
+                attempt + 1,
+                _SMART_CLICK_MAX_ATTEMPTS,
+                popup_scrolls + 1,
             )
+            device.swipe(
+                start=_DEFAULT_BLIND_SCROLL.start,
+                end=_DEFAULT_BLIND_SCROLL.end,
+                duration=0.5,
+            )
+            time.sleep(_SMART_CLICK_POST_SCROLL_WAIT_S)
+            popup_scrolls += 1
+            continue
 
         # --- State C: compute scroll & swipe ---
         scroll = compute_scroll_to_reveal(

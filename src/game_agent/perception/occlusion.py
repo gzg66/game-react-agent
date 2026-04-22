@@ -18,6 +18,22 @@ logger = logging.getLogger(__name__)
 OCCLUSION_COVERAGE_THRESHOLD = 0.15
 LARGE_POPUP_AREA_THRESHOLD = 0.6
 
+_STRUCTURAL_OVERLAY_KEYWORDS = frozenset({
+    "clickeffect", "effect", "guide", "softguide",
+    "ggraph", "background", "mask", "loading", "transition",
+})
+
+
+def _is_structural_overlay(node: PocoNode) -> bool:
+    """Return True if *node* is a structural UI overlay rather than a popup."""
+    name_lower = node.name.lower()
+    if any(kw in name_lower for kw in _STRUCTURAL_OVERLAY_KEYWORDS):
+        return True
+    alpha = node.payload.get("alpha", 1.0)
+    if isinstance(alpha, (int, float)) and 0.01 < alpha < 0.5:
+        return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Bounding box
@@ -172,7 +188,9 @@ def check_occlusion(
     total_coverage = min(total_coverage, 1.0)
 
     is_large_popup = any(
-        compute_bbox(o).area >= LARGE_POPUP_AREA_THRESHOLD for o in occluders
+        compute_bbox(o).area >= LARGE_POPUP_AREA_THRESHOLD
+        and not _is_structural_overlay(o)
+        for o in occluders
     )
     is_occluded = total_coverage > OCCLUSION_COVERAGE_THRESHOLD
 

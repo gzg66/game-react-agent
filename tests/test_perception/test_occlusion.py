@@ -4,6 +4,7 @@ from game_agent.device.base import PocoNode
 from game_agent.perception.occlusion import (
     BoundingBox,
     OcclusionResult,
+    _is_structural_overlay,
     check_occlusion,
     compute_bbox,
     compute_scroll_to_reveal,
@@ -198,6 +199,93 @@ class TestCheckOcclusion:
         target = _node(pos=(0.5, 0.5), size=(0.0, 0.0), path="Root > z")
         result = check_occlusion(target, [target])
         assert result.is_occluded is False
+
+    def test_structural_overlay_not_treated_as_popup(self):
+        """ClickEffect and Guide overlays should NOT trigger is_large_popup."""
+        target = _node(
+            name="btnChallenge", pos=(0.84, 0.84), size=(0.07, 0.03),
+            z_global=2, path="Root > Window > btnChallenge",
+        )
+        click_effect = _node(
+            name="ClickEffect", pos=(0.5, 0.5), size=(1.0, 1.0),
+            z_global=10, path="Root > ClickEffect",
+        )
+        result = check_occlusion(target, [target, click_effect])
+        assert result.is_occluded is True
+        assert result.is_large_popup is False
+
+    def test_guide_overlay_not_treated_as_popup(self):
+        target = _node(
+            name="btnAction", pos=(0.5, 0.5), size=(0.1, 0.05),
+            z_global=1, path="Root > btnAction",
+        )
+        guide = _node(
+            name="SoftGuideView", pos=(0.5, 0.5), size=(1.0, 1.0),
+            z_global=10, path="Root > Guide > SoftGuideView",
+        )
+        result = check_occlusion(target, [target, guide])
+        assert result.is_occluded is True
+        assert result.is_large_popup is False
+
+    def test_semitransparent_overlay_not_treated_as_popup(self):
+        target = _node(
+            name="btn", pos=(0.5, 0.5), size=(0.1, 0.05),
+            z_global=1, path="Root > btn",
+        )
+        overlay = _node(
+            name="dimLayer", pos=(0.5, 0.5), size=(1.0, 1.0),
+            z_global=10, path="Root > dimLayer", alpha=0.3,
+        )
+        result = check_occlusion(target, [target, overlay])
+        assert result.is_occluded is True
+        assert result.is_large_popup is False
+
+    def test_real_popup_still_detected(self):
+        """A non-structural large node should still be detected as popup."""
+        target = _node(
+            name="btn", pos=(0.5, 0.5), size=(0.1, 0.05),
+            z_global=1, path="Root > btn",
+        )
+        popup = _node(
+            name="DialogPanel", pos=(0.5, 0.5), size=(0.9, 0.9),
+            z_global=10, path="Root > DialogPanel",
+        )
+        result = check_occlusion(target, [target, popup])
+        assert result.is_occluded is True
+        assert result.is_large_popup is True
+
+
+# ---------------------------------------------------------------------------
+# _is_structural_overlay
+# ---------------------------------------------------------------------------
+
+class TestIsStructuralOverlay:
+    def test_click_effect(self):
+        assert _is_structural_overlay(_node(name="ClickEffect")) is True
+
+    def test_guide_node(self):
+        assert _is_structural_overlay(_node(name="SoftGuideView")) is True
+
+    def test_ggraph(self):
+        assert _is_structural_overlay(_node(name="GGraph")) is True
+
+    def test_background(self):
+        assert _is_structural_overlay(_node(name="background")) is True
+
+    def test_mask(self):
+        assert _is_structural_overlay(_node(name="popupMask")) is True
+
+    def test_semitransparent(self):
+        assert _is_structural_overlay(_node(name="layer", alpha=0.3)) is True
+
+    def test_normal_button_is_not_overlay(self):
+        assert _is_structural_overlay(_node(name="btnOK")) is False
+
+    def test_popup_panel_is_not_overlay(self):
+        assert _is_structural_overlay(_node(name="DialogPanel")) is False
+
+    def test_opaque_panel_is_not_overlay(self):
+        assert _is_structural_overlay(_node(name="Panel", alpha=1.0)) is False
 
 
 # ---------------------------------------------------------------------------

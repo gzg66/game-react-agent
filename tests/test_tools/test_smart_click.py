@@ -168,3 +168,52 @@ class TestSmartClick:
 
         assert result.success is False
         assert "尝试" in result.message
+
+    def test_structural_overlay_scrolls_then_clicks(self, _sleep, tmp_path):
+        """ClickEffect overlay is not a popup — smart_click scrolls past it."""
+        target = _node(
+            name="btnChallenge", pos=(0.84, 0.84), size=(0.07, 0.03),
+            z_global=2, path="Root > Window > btnChallenge",
+        )
+        click_effect = _node(
+            name="ClickEffect", pos=(0.5, 0.5), size=(1.0, 1.0),
+            z_global=10, path="Root > ClickEffect",
+        )
+        revealed_target = _node(
+            name="btnChallenge", pos=(0.84, 0.60), size=(0.07, 0.03),
+            z_global=2, path="Root > Window > btnChallenge",
+        )
+
+        device = MockDevice()
+        device.load_scenario([
+            MockScreen(poco_tree=[target, click_effect]),
+            MockScreen(poco_tree=[revealed_target]),
+        ])
+        store = _make_store(tmp_path)
+
+        result = smart_click(device, store, SmartClickInput(node_name="btnChallenge"))
+
+        assert result.success is True
+        swipes = [c for c in device.call_log if c["method"] == "swipe"]
+        assert len(swipes) >= 1
+
+    def test_large_popup_scrolls_before_failing(self, _sleep, tmp_path):
+        """Real popup: smart_click tries scrolling before giving up."""
+        target = _node(
+            name="btnAction", pos=(0.5, 0.5), size=(0.1, 0.05),
+            z_global=1, path="Root > btnAction",
+        )
+        popup = _node(
+            name="popup_bg", pos=(0.5, 0.5), size=(0.9, 0.9),
+            z_global=10, path="Root > Popup > popup_bg",
+        )
+        device = MockDevice()
+        device.load_scenario([MockScreen(poco_tree=[target, popup])])
+        store = _make_store(tmp_path, [target, popup])
+
+        result = smart_click(device, store, SmartClickInput(node_name="btnAction"))
+
+        assert result.success is False
+        assert "弹窗" in result.message
+        swipes = [c for c in device.call_log if c["method"] == "swipe"]
+        assert len(swipes) == 2, "should have tried scrolling before giving up"
