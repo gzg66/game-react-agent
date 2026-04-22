@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 AIRTEST_IMPORT_ERROR: Exception | None = None
 
 try:
-    from airtest.core.api import connect_device, snapshot, swipe as airtest_swipe, touch
+    from airtest.core.api import snapshot, swipe as airtest_swipe, touch
 
     HAS_AIRTEST = True
 except Exception as exc:
@@ -210,28 +210,73 @@ class AirtestDevice(DeviceController):
         return self._flatten_tree(hierarchy)
 
     def screenshot(self) -> bytes:
+        providers: list[tuple[str, Any]] = []
+        if self._device is not None and hasattr(self._device, "snapshot"):
+            providers.append(("device.snapshot", lambda: self._device.snapshot()))
+        providers.append(("airtest.snapshot", lambda: snapshot(filename=None)))
+
+        for provider_name, provider in providers:
+            try:
+                screen = provider()
+            except Exception as exc:
+                logger.warning("%s 截图失败：%s", provider_name, exc)
+                continue
+            data = self._normalize_screenshot(screen)
+            if data:
+                return data
+            logger.warning("%s 返回空或未识别数据，继续尝试下一种截图方式", provider_name)
+
+        logger.warning("Airtest 截图链路均失败，尝试使用 ADB screencap 兜底")
+        fallback = self._adb_screenshot()
+        if fallback:
+            return fallback
+        raise PerceptionError("设备截图失败：Airtest 与 ADB screencap 均未返回有效 PNG")
+
+    def _normalize_screenshot(self, screen: Any) -> bytes | None:
         import io
         from PIL import Image
 
-        screen = snapshot(filename=None)
         if screen is None:
-            logger.warning("Airtest snapshot 返回空数据，尝试使用 ADB screencap 兜底")
-            fallback = self._adb_screenshot()
-            if fallback:
-                return fallback
-            raise PerceptionError("设备截图失败：Airtest snapshot 返回空数据")
-        buf = io.BytesIO()
+            return None
+
         if isinstance(screen, Image.Image):
+            buf = io.BytesIO()
             screen.save(buf, format="PNG")
-        elif isinstance(screen, (bytes, bytearray)):
-            buf.write(screen)
-        else:
-            logger.warning("Airtest snapshot 返回了未知类型 %s，尝试使用 ADB screencap 兜底", type(screen).__name__)
-            fallback = self._adb_screenshot()
-            if fallback:
-                return fallback
-            raise PerceptionError(f"设备截图失败：snapshot 返回未知类型 {type(screen).__name__}")
-        return buf.getvalue()
+            return buf.getvalue()
+
+        if isinstance(screen, (bytes, bytearray)):
+            data = bytes(screen)
+            return data if data else None
+
+        if isinstance(screen, (str, Path)):
+            path = Path(screen)
+            if path.exists():
+                data = path.read_bytes()
+                return data if data else None
+            return None
+
+        if isinstance(screen, dict):
+            for key in ("screen", "filename", "path"):
+                value = screen.get(key)
+                data = self._normalize_screenshot(value)
+                if data:
+                    return data
+            return None
+
+        array_interface = getattr(screen, "__array_interface__", None)
+        if array_interface is not None:
+            try:
+                import numpy as np
+
+                image = Image.fromarray(np.asarray(screen))
+                buf = io.BytesIO()
+                image.save(buf, format="PNG")
+                return buf.getvalue()
+            except Exception as exc:
+                logger.debug("数组截图归一化失败：%s", exc)
+                return None
+
+        return None
 
     def _adb_screenshot(self) -> bytes | None:
         result = subprocess.run(
@@ -304,13 +349,10 @@ class AirtestDevice(DeviceController):
 
     def snapshot_to_file(self, save_path: str) -> bool:
         try:
-            temp_path = "/sdcard/temp_screen_agent.png"
-            self._adb_cmd("shell", "screencap", "-p", temp_path)
-            subprocess.run(
-                [self._get_adb(), "-s", self._config.device_serial, "pull", temp_path, save_path],
-                check=False, capture_output=True,
-            )
-            return Path(save_path).exists()
+            output_path = Path(save_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(self.screenshot())
+            return output_path.exists()
         except Exception:
             return False
 
