@@ -21,6 +21,15 @@ OVERLAY_NAME_EXCLUSIONS: tuple[str, ...] = (
     "ggroup", "ggraph", "container", "node", "panel", "layer", "root",
     "canvas", "scene", "wrapper",
 )
+GUIDE_GLOADER3D_PATH_SUFFIX: tuple[str, ...] = (
+    "GRoot",
+    "Container",
+    "Guide",
+    "Container",
+    "SoftGuideView",
+    "Container",
+    "GLoader3D",
+)
 
 
 class PocoTreeExtractor:
@@ -74,13 +83,15 @@ class PocoTreeExtractor:
     def _detect_guide(visible_nodes: list[PocoNode]) -> PocoNode | None:
         """Detect a FairyGUI guide finger-effect node in the Poco tree.
 
-        Matches visible nodes whose path contains a "Guide" segment and
-        whose name is "GLoader3D" — the 3-D loader used for the finger
-        animation overlay.
+        Matches only the guide loader under the expected FairyGUI subtree:
+        GRoot > Container > Guide > Container > SoftGuideView > Container > GLoader3D.
         """
         for node in visible_nodes:
-            parts = node.poco_path.split(" > ")
-            if "Guide" in parts and node.name == "GLoader3D":
+            parts = tuple(part.strip() for part in node.poco_path.split(" > ") if part.strip())
+            if (
+                node.name == "GLoader3D"
+                and parts[-len(GUIDE_GLOADER3D_PATH_SUFFIX):] == GUIDE_GLOADER3D_PATH_SUFFIX
+            ):
                 logger.info("L1 引导节点检测命中：%s @ (%.2f, %.2f)", node.poco_path, *node.pos)
                 return node
         return None

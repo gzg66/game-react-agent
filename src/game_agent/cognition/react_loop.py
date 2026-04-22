@@ -16,6 +16,7 @@ from game_agent.cognition.gemini_client import GeminiClient
 from game_agent.cognition.navigation_memory import NavigationMemory
 from game_agent.cognition.page_cache import PageKnowledge, PageKnowledgeCache
 from game_agent.config import AppConfig
+from game_agent.device.base import PocoNode
 from game_agent.exceptions import PerceptionError
 from game_agent.graph.annotator import PageAnnotator
 from game_agent.perception.base import PerceptionProvider
@@ -31,6 +32,37 @@ PAGE_STALENESS_THRESHOLD = 5
 CYCLE_DETECTION_MIN_REPETITIONS = 3
 POST_ACTION_LOADING_RETRIES = 3
 POST_ACTION_LOADING_WAIT_S = 1.0
+L1_SHORTCUT_WAIT_S = 0.3
+L1_DIALOG_SKIP_WAIT_S = 2.0
+
+POPUP_CLOSE_TEXT = "点击任意区域关闭"
+SKIP_BUTTON_TEXT = "跳过"
+DIALOG_HINT_TOKENS: tuple[str, ...] = (
+    "dialog",
+    "dialogue",
+    "talk",
+    "story",
+    "plot",
+    "conversation",
+    "chat",
+    "bubble",
+    "subtitle",
+    "speaker",
+    "对话",
+    "剧情",
+    "台词",
+    "旁白",
+    "说话",
+)
+GUIDE_GLOADER3D_PATH_SUFFIX: tuple[str, ...] = (
+    "GRoot",
+    "Container",
+    "Guide",
+    "Container",
+    "SoftGuideView",
+    "Container",
+    "GLoader3D",
+)
 
 
 @dataclass
@@ -138,6 +170,84 @@ class ReActLoop:
             return f"touch({x:.2f},{y:.2f})"
         return None
 
+    @staticmethod
+    def _node_text(node: PocoNode) -> str:
+        return (node.text or "").strip()
+
+    @classmethod
+    def _node_haystack(cls, node: PocoNode) -> str:
+        parts = [node.name, node.poco_path, cls._node_text(node)]
+        return " ".join(part for part in parts if part).lower()
+
+    @staticmethod
+    def _find_l1_gloader3d_node(perception: L1Perception) -> PocoNode | None:
+        for node in perception.all_visible_nodes:
+            parts = tuple(part.strip() for part in node.poco_path.split(" > ") if part.strip())
+            if (
+                node.visible
+                and node.name == "GLoader3D"
+                and parts[-len(GUIDE_GLOADER3D_PATH_SUFFIX):] == GUIDE_GLOADER3D_PATH_SUFFIX
+            ):
+                return node
+        return None
+
+    def _find_l1_popup_close_node(self, visible_nodes: list[PocoNode]) -> PocoNode | None:
+        for node in visible_nodes:
+            if POPUP_CLOSE_TEXT in self._node_text(node):
+                return node
+        return None
+
+    def _find_l1_dialog_skip_node(self, visible_nodes: list[PocoNode]) -> PocoNode | None:
+        skip_node: PocoNode | None = None
+        for node in visible_nodes:
+            haystack = self._node_haystack(node)
+            if SKIP_BUTTON_TEXT in self._node_text(node) or "skip" in haystack:
+                skip_node = node
+                break
+
+        if skip_node is None:
+            return None
+
+        for node in visible_nodes:
+            if node is skip_node:
+                continue
+            haystack = self._node_haystack(node)
+            if any(token in haystack for token in DIALOG_HINT_TOKENS):
+                return skip_node
+        return None
+
+    async def _execute_l1_shortcut_click(
+        self,
+        *,
+        step_number: int,
+        page_hash: str,
+        node: PocoNode,
+        action_name: str,
+        thought: str,
+        log_message: str,
+        post_wait_s: float,
+    ) -> None:
+        logger.info("步骤 %d：%s", step_number, log_message)
+        x, y = node.pos
+        tool_result = self._tools.execute("airtest_touch_pos", {"x": x, "y": y})
+        step = ReActStep(
+            step_number=step_number,
+            thought=thought,
+            action_name=action_name,
+            action_params={
+                "x": x,
+                "y": y,
+                "node_name": node.name,
+                "text": node.text or "",
+                "path": node.poco_path,
+            },
+            observation=tool_result.message,
+            timestamp=time.time(),
+            page_hash=page_hash,
+        )
+        self._context.add_step(step)
+        await asyncio.sleep(post_wait_s)
+
     def _get_page_context(
         self,
         page_hash: str,
@@ -169,7 +279,7 @@ class ReActLoop:
             logger.warning("页面标注失败：%s", exc)
             return "（页面识别不可用）"
 
-    def _decompose_task(self, task: str, perception_text: str) -> str:
+    def _decompose_task(self, task: str, perception_text: str) -> list[str]:
         """Decompose a high-level task into ordered sub-goals via LLM."""
         try:
             prompt = prompts.TASK_DECOMPOSITION_PROMPT.format(
@@ -185,14 +295,35 @@ class ReActLoop:
                     response.text.strip().strip("`").removeprefix("json").strip()
                 )
                 if isinstance(sub_goals, list) and sub_goals:
-                    formatted = "\n".join(
-                        f"{i+1}. {g}" for i, g in enumerate(sub_goals)
-                    )
-                    logger.info("任务已分解为 %d 个子目标", len(sub_goals))
-                    return formatted
+                    normalized = [
+                        goal.strip() for goal in sub_goals
+                        if isinstance(goal, str) and goal.strip()
+                    ]
+                    if normalized:
+                        logger.info("任务已分解为 %d 个子目标", len(normalized))
+                        return normalized
         except Exception as exc:
             logger.warning("任务分解失败：%s", exc)
-        return "（未分解，直接执行整体任务）"
+        return []
+
+    @staticmethod
+    def _format_sub_goals(sub_goals: list[str]) -> str:
+        if not sub_goals:
+            return "（未分解，直接执行整体任务）"
+        return "\n".join(f"{i+1}. {goal}" for i, goal in enumerate(sub_goals))
+
+    def _select_fast_path_query(
+        self, task: str, sub_goals: list[str], current_hash: str,
+    ) -> str:
+        """Prefer the first unfinished sub-goal when it maps to cached pages."""
+        for goal in sub_goals:
+            goal_pages = self._find_goal_pages(goal, current_hash)
+            if not goal_pages:
+                return task
+            if current_hash in goal_pages:
+                continue
+            return goal
+        return task
 
     def _format_cycling_buttons(self) -> str:
         """List buttons from recent steps that form the detected cycle."""
@@ -348,6 +479,58 @@ class ReActLoop:
             total_steps=len(path),
         )
 
+    async def _attempt_fast_path_with_log(
+        self,
+        *,
+        query: str,
+        start_hash: str,
+        source: str,
+        fallback_query: str | None = None,
+    ) -> AgentResult | None:
+        """Try fast path and emit human-readable logs for source/fallback."""
+        logger.info(
+            "快速导航：开始尝试%s fast path，查询=%s，起点页面=%s",
+            source,
+            query,
+            start_hash[:8],
+        )
+        result = await self._try_fast_path(query, start_hash)
+        if result is not None:
+            if fallback_query is not None:
+                logger.info(
+                    "快速导航：%s fast path 失败 -> %s fast path 命中：%s",
+                    fallback_query,
+                    source,
+                    query,
+                )
+            else:
+                logger.info("快速导航：%s fast path 命中：%s", source, query)
+            return result
+
+        if fallback_query is not None:
+            logger.info(
+                "快速导航：%s fast path 失败，切换到%s fast path：%s",
+                fallback_query,
+                source,
+                query,
+            )
+        else:
+            logger.info("快速导航：%s fast path 未命中：%s", source, query)
+        return None
+
+    def _merge_fast_path_result(
+        self, fast_result: AgentResult, completed_steps: int,
+    ) -> AgentResult:
+        """Merge a fast-path result with steps already executed in this run."""
+        if completed_steps <= 0 and not self._context._steps:
+            return fast_result
+        return AgentResult(
+            success=fast_result.success,
+            steps=list(self._context._steps),
+            final_message=fast_result.final_message,
+            total_steps=completed_steps + fast_result.total_steps,
+        )
+
     # ---- Main ReAct loop ----
 
     async def run(self, task: str, max_steps: int = 50) -> AgentResult:
@@ -358,30 +541,31 @@ class ReActLoop:
         start_hash = self._perception.to_state(initial_perception).page_hash[:16]
         self._ui_tree_store.update(start_hash, initial_perception.all_visible_nodes)
 
-        fast_result = await self._try_fast_path(task, start_hash)
+        fast_result = await self._attempt_fast_path_with_log(
+            query=task,
+            start_hash=start_hash,
+            source="原始任务",
+        )
         if fast_result is not None:
-            return fast_result
+            return self._merge_fast_path_result(fast_result, completed_steps=0)
 
         # Fast path unavailable — fall back to full ReAct loop.
-        # Re-capture in case fast path partially changed state.
-        initial_perception = self._perception.capture_l1()
-
-        self._gemini.start_chat(
-            system_prompt=prompts.STATIC_SYSTEM_INSTRUCTION,
-            tools=self._tools.get_gemini_tools(),
-        )
-        sub_goals = self._decompose_task(
-            task, initial_perception.poco_tree_markdown
-        )
+        # Fast path may have partially changed state; the main loop re-samples before acting.
+        last_fast_path_attempt = (start_hash, task)
 
         action_count = 0
         force_l2_reason: str | None = None
+        chat_started = False
+        sub_goals_ready = False
+        sub_goal_list: list[str] = []
+        sub_goals = "（未分解，直接执行整体任务）"
 
         while action_count < max_steps:
             l1_perception = self._perception.capture_l1()
             curr_state = self._perception.to_state(l1_perception)
             curr_page_hash = curr_state.page_hash[:16]
             self._ui_tree_store.update(curr_page_hash, l1_perception.all_visible_nodes)
+
             logger.info(
                 "步骤 %d：页面=%s，可交互节点=%d",
                 action_count,
@@ -389,33 +573,105 @@ class ReActLoop:
                 len(l1_perception.interactive_nodes),
             )
 
-            # --- Guide shortcut: detect finger-effect in Poco tree, skip LLM ---
-            if l1_perception.guide_node is not None:
-                guide = l1_perception.guide_node
-                logger.info(
-                    "步骤 %d：L1 引导检测命中，直接点击 %s @ (%.2f, %.2f)",
-                    action_count, guide.poco_path, *guide.pos,
-                )
-                gx, gy = guide.pos
-                tool_result = self._tools.execute(
-                    "airtest_touch_pos", {"x": gx, "y": gy},
-                )
-                step = ReActStep(
+            gloader_node = self._find_l1_gloader3d_node(l1_perception)
+            if gloader_node is not None:
+                await self._execute_l1_shortcut_click(
                     step_number=action_count,
-                    thought="L1 引导检测：发现引导手指特效节点，直接跟随点击",
-                    action_name="guide_click",
-                    action_params={"x": gx, "y": gy, "path": guide.poco_path},
-                    observation=tool_result.message,
-                    timestamp=time.time(),
                     page_hash=curr_page_hash,
-                )
-                self._context.add_step(step)
-                self._nav_memory.record(
-                    curr_page_hash, f"guide@({gx:.2f},{gy:.2f})", curr_page_hash,
+                    node=gloader_node,
+                    action_name="gloader3d_click",
+                    thought="L1 检测到 GLoader3D 特效节点，直接点击以跟随引导",
+                    log_message=(
+                        "L1 特效检测命中，直接点击 GLoader3D %s @ (%.2f, %.2f)"
+                        % (gloader_node.poco_path, *gloader_node.pos)
+                    ),
+                    post_wait_s=L1_SHORTCUT_WAIT_S,
                 )
                 action_count += 1
                 force_l2_reason = None
-                await asyncio.sleep(0.3)
+                continue
+
+            popup_close_node = self._find_l1_popup_close_node(l1_perception.all_visible_nodes)
+            if popup_close_node is not None:
+                await self._execute_l1_shortcut_click(
+                    step_number=action_count,
+                    page_hash=curr_page_hash,
+                    node=popup_close_node,
+                    action_name="popup_close_click",
+                    thought="L1 检测到“点击任意区域关闭”弹窗提示，直接点击关闭",
+                    log_message=(
+                        "L1 弹窗关闭检测命中，直接点击 %s @ (%.2f, %.2f)"
+                        % (popup_close_node.poco_path, *popup_close_node.pos)
+                    ),
+                    post_wait_s=L1_SHORTCUT_WAIT_S,
+                )
+                action_count += 1
+                force_l2_reason = None
+                continue
+
+            dialog_skip_node = self._find_l1_dialog_skip_node(l1_perception.all_visible_nodes)
+            if dialog_skip_node is not None:
+                await self._execute_l1_shortcut_click(
+                    step_number=action_count,
+                    page_hash=curr_page_hash,
+                    node=dialog_skip_node,
+                    action_name="dialog_skip_click",
+                    thought="L1 检测到对话界面，直接点击“跳过”并等待界面推进",
+                    log_message=(
+                        "L1 对话跳过检测命中，直接点击 %s @ (%.2f, %.2f)，并等待 %.1f 秒"
+                        % (dialog_skip_node.poco_path, *dialog_skip_node.pos, L1_DIALOG_SKIP_WAIT_S)
+                    ),
+                    post_wait_s=L1_DIALOG_SKIP_WAIT_S,
+                )
+                action_count += 1
+                force_l2_reason = None
+                continue
+
+            if not sub_goals_ready:
+                sub_goal_list = self._decompose_task(
+                    task, l1_perception.poco_tree_markdown,
+                )
+                sub_goals = self._format_sub_goals(sub_goal_list)
+                if sub_goal_list:
+                    first_pending_sub_goal = self._select_fast_path_query(
+                        task, sub_goal_list, curr_page_hash,
+                    )
+                    if first_pending_sub_goal != task:
+                        logger.info(
+                            "任务分解摘要：当前首个未完成子任务：%s",
+                            first_pending_sub_goal,
+                        )
+                    else:
+                        logger.info(
+                            "任务分解摘要：已生成 %d 个子任务，当前优先继续按原始任务推进",
+                            len(sub_goal_list),
+                        )
+                sub_goals_ready = True
+
+            fast_path_query = self._select_fast_path_query(
+                task, sub_goal_list, curr_page_hash,
+            )
+            current_fast_path_attempt = (curr_page_hash, fast_path_query)
+            if current_fast_path_attempt != last_fast_path_attempt:
+                fast_result = await self._attempt_fast_path_with_log(
+                    query=fast_path_query,
+                    start_hash=curr_page_hash,
+                    source="子任务" if fast_path_query != task else "原始任务",
+                    fallback_query="原始任务" if fast_path_query != task else None,
+                )
+                last_fast_path_attempt = current_fast_path_attempt
+                if fast_result is not None:
+                    if fast_path_query != task:
+                        action_count += fast_result.total_steps
+                        logger.info(
+                            "快速导航：子任务已到达目标页面，继续推进后续目标（累计步数=%d）",
+                            action_count,
+                        )
+                        force_l2_reason = None
+                        continue
+                    return self._merge_fast_path_result(
+                        fast_result, completed_steps=action_count,
+                    )
                 continue
 
             stale_count = self._context.page_stale_count()
@@ -440,6 +696,13 @@ class ReActLoop:
                     use_l2 = False
             else:
                 perception_data = l1_perception
+
+            if not chat_started:
+                self._gemini.start_chat(
+                    system_prompt=prompts.STATIC_SYSTEM_INSTRUCTION,
+                    tools=self._tools.get_gemini_tools(),
+                )
+                chat_started = True
 
             if is_cycling:
                 logger.warning(
