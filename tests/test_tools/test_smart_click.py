@@ -5,7 +5,7 @@ from unittest.mock import patch
 from game_agent.device.base import PocoNode
 from game_agent.device.mock_device import MockDevice, MockScreen
 from game_agent.perception.ui_tree_store import UITreeStore
-from game_agent.tools.macros import smart_click, _tree_changed
+from game_agent.tools.macros import smart_click, _click_effective
 from game_agent.tools.schemas import SmartClickInput
 
 
@@ -39,26 +39,35 @@ def _make_store(tmp_path, nodes=None, page_hash="page1"):
     return store
 
 
-class TestTreeChanged:
-    def test_same_nodes(self):
-        a = [_node(name="x"), _node(name="y")]
-        b = [_node(name="x"), _node(name="y")]
-        assert _tree_changed(a, b) is False
+class TestClickEffective:
+    def test_target_disappeared(self):
+        post = [_node(name="otherNode")]
+        assert _click_effective("btnOK", (0.5, 0.5), [_node(name="btnOK")], post) is True
 
-    def test_node_added(self):
-        a = [_node(name="x")]
-        b = [_node(name="x"), _node(name="y")]
-        assert _tree_changed(a, b) is True
+    def test_target_moved(self):
+        post = [_node(name="btnOK", pos=(0.5, 0.3))]
+        assert _click_effective("btnOK", (0.5, 0.5), [_node(name="btnOK")], post) is True
 
-    def test_node_removed(self):
-        a = [_node(name="x"), _node(name="y")]
-        b = [_node(name="x")]
-        assert _tree_changed(a, b) is True
+    def test_target_unmoved(self):
+        pre = [_node(name="btnOK", pos=(0.5, 0.5))]
+        post = [_node(name="btnOK", pos=(0.5, 0.5))]
+        assert _click_effective("btnOK", (0.5, 0.5), pre, post) is False
 
-    def test_invisible_ignored(self):
-        a = [_node(name="x"), _node(name="y", visible=False)]
-        b = [_node(name="x")]
-        assert _tree_changed(a, b) is False
+    def test_target_tiny_jitter_ignored(self):
+        pre = [_node(name="btnOK", pos=(0.5, 0.5))]
+        post = [_node(name="btnOK", pos=(0.51, 0.50))]
+        assert _click_effective("btnOK", (0.5, 0.5), pre, post) is False
+
+    def test_page_hash_changed(self):
+        pre = [
+            _node(name="btnOK", pos=(0.5, 0.5)),
+            _node(name="btnStart", pos=(0.2, 0.2), path="Root > btnStart"),
+        ]
+        post = [
+            _node(name="btnOK", pos=(0.5, 0.5)),
+            _node(name="btnTrack", pos=(0.2, 0.2), path="Root > btnTrack"),
+        ]
+        assert _click_effective("btnOK", (0.5, 0.5), pre, post) is True
 
 
 @patch("game_agent.tools.macros.time.sleep", return_value=None)
@@ -66,16 +75,16 @@ class TestSmartClick:
     """All tests patch time.sleep so the post-action waits are instant."""
 
     def test_click_verified_success(self, _sleep, tmp_path):
-        """Target on-screen, click changes tree → success on first attempt."""
-        before = _node(name="btnOK", pos=(0.5, 0.4), path="Root > btnOK")
-        after = _node(name="resultLabel", pos=(0.5, 0.5), path="Root > resultLabel")
+        """Target on-screen, target disappears after click → success."""
+        target = _node(name="btnOK", pos=(0.5, 0.4), path="Root > btnOK")
+        new_page = _node(name="resultLabel", pos=(0.5, 0.5), path="Root > resultLabel")
 
         device = MockDevice()
         device.load_scenario([
-            MockScreen(poco_tree=[before]),  # Phase 1: find target
-            MockScreen(poco_tree=[after]),   # Phase 2 verify: tree changed
+            MockScreen(poco_tree=[target]),    # Phase 1: find target
+            MockScreen(poco_tree=[new_page]),  # Phase 2 verify: target gone
         ])
-        store = _make_store(tmp_path, [before])
+        store = _make_store(tmp_path, [target])
 
         result = smart_click(device, store, SmartClickInput(node_name="btnOK"))
 
@@ -87,27 +96,30 @@ class TestSmartClick:
         assert len(swipes) == 0
 
     def test_click_blocked_then_scrolls(self, _sleep, tmp_path):
-        """Target on-screen but occluded — click has no effect, triggers scroll."""
+        """Target on-screen but occluded — target stays put after click, triggers scroll."""
         target = _node(
             name="btnChallenge", pos=(0.84, 0.92), size=(0.07, 0.03),
             z_global=2, path="Root > List > btnChallenge",
         )
+        # After blocked click, target is still at exact same position
+        target_still_there = _node(
+            name="btnChallenge", pos=(0.84, 0.92), size=(0.07, 0.03),
+            z_global=2, path="Root > List > btnChallenge",
+        )
+        # After scroll, target moved up into safe area
         revealed = _node(
             name="btnChallenge", pos=(0.84, 0.70), size=(0.07, 0.03),
             z_global=2, path="Root > List > btnChallenge",
         )
         after_click = _node(name="newPage", pos=(0.5, 0.5), path="Root > newPage")
 
-        blocked_screen = MockScreen(poco_tree=[target])
-
         device = MockDevice()
         device.load_scenario([
-            blocked_screen,          # attempt 0 Phase 1: find target
-            blocked_screen,          # attempt 0 Phase 2 verify: same tree (click blocked)
-            # click() calls advance -> cursor 1, but screen is same
-            # swipe() calls advance -> cursor 2
-            MockScreen(poco_tree=[revealed]),  # attempt 1 Phase 1: after scroll
-            MockScreen(poco_tree=[after_click]),  # attempt 1 Phase 2 verify: changed!
+            MockScreen(poco_tree=[target]),              # attempt 0 Phase 1: find target
+            MockScreen(poco_tree=[target_still_there]),   # attempt 0 Phase 2: target unmoved → blocked
+            # swipe() advances cursor
+            MockScreen(poco_tree=[revealed]),             # attempt 1 Phase 1: target moved after scroll
+            MockScreen(poco_tree=[after_click]),          # attempt 1 Phase 2: target gone → success
         ])
         store = _make_store(tmp_path)
 
@@ -127,10 +139,9 @@ class TestSmartClick:
 
         device = MockDevice()
         device.load_scenario([
-            MockScreen(poco_tree=[off_target]),   # Phase 1: off-screen
-            # swipe() advances
-            MockScreen(poco_tree=[on_target]),     # next iter Phase 1
-            MockScreen(poco_tree=[after_click]),   # Phase 2 verify: changed
+            MockScreen(poco_tree=[off_target]),   # Phase 1: off-screen → scroll
+            MockScreen(poco_tree=[on_target]),    # next iter Phase 1: on-screen → click
+            MockScreen(poco_tree=[after_click]),  # Phase 2 verify: target gone → success
         ])
         store = _make_store(tmp_path)
 
@@ -162,9 +173,9 @@ class TestSmartClick:
 
         device = MockDevice()
         device.load_scenario([
-            MockScreen(poco_tree=[]),        # screen 1: empty
-            MockScreen(poco_tree=[target]),   # after blind swipe
-            MockScreen(poco_tree=[after_click]),  # verify: changed
+            MockScreen(poco_tree=[]),         # empty → blind swipe
+            MockScreen(poco_tree=[target]),   # target found → click
+            MockScreen(poco_tree=[after_click]),  # verify: target gone → success
         ])
         store = _make_store(tmp_path)
 
@@ -178,12 +189,12 @@ class TestSmartClick:
         """Node found by its text field when name doesn't match."""
         target = _node(name="GTextField", text="挑战",
                        pos=(0.5, 0.4), path="Root > GTextField")
-        after_click = _node(name="result", pos=(0.5, 0.5), path="Root > result")
+        after_click = _node(name="newPage", pos=(0.5, 0.5), path="Root > newPage")
 
         device = MockDevice()
         device.load_scenario([
-            MockScreen(poco_tree=[target]),
-            MockScreen(poco_tree=[after_click]),
+            MockScreen(poco_tree=[target]),       # find by text
+            MockScreen(poco_tree=[after_click]),  # verify: target gone
         ])
         store = _make_store(tmp_path, [target])
 
@@ -208,12 +219,12 @@ class TestSmartClick:
     def test_edge_position_clamped(self, _sleep, tmp_path):
         """Target at screen edge — coordinates clamped to safe bounds."""
         target = _node(name="btnEdge", pos=(0.99, 0.96), path="Root > btnEdge")
-        after_click = _node(name="result", pos=(0.5, 0.5), path="Root > result")
+        after_click = _node(name="newPage", pos=(0.5, 0.5), path="Root > newPage")
 
         device = MockDevice()
         device.load_scenario([
-            MockScreen(poco_tree=[target]),
-            MockScreen(poco_tree=[after_click]),
+            MockScreen(poco_tree=[target]),       # find target
+            MockScreen(poco_tree=[after_click]),   # verify: target gone
         ])
         store = _make_store(tmp_path, [target])
 

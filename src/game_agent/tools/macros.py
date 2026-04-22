@@ -6,6 +6,7 @@ import logging
 import time
 
 from game_agent.device.base import DeviceController, PocoNode
+from game_agent.graph.hasher import PageHasher
 from game_agent.graph.models import UIStateGraph
 from game_agent.graph.navigator import GraphNavigator
 from game_agent.perception.occlusion import (
@@ -128,11 +129,32 @@ _DEFAULT_BLIND_SCROLL = ScrollVector(
 )
 
 
-def _tree_changed(before: list[PocoNode], after: list[PocoNode]) -> bool:
-    """Check whether the visible node set changed between two tree snapshots."""
-    pre = {n.name for n in before if n.visible}
-    post = {n.name for n in after if n.visible}
-    return pre != post
+_CLICK_VERIFY_MOVE_THRESHOLD = 0.05
+_PAGE_HASHER = PageHasher()
+
+
+def _click_effective(
+    target_name: str,
+    pre_pos: tuple[float, float],
+    pre_visible: list[PocoNode],
+    post_visible: list[PocoNode],
+) -> bool:
+    """Check whether a click had real effect by examining the target node.
+
+    Returns True (click worked) when the target node disappeared or moved
+    significantly, or when the page structural hash changed — indicating a
+    page transition or meaningful UI update happened.
+    Returns False (click blocked) when the target is still at the same spot.
+    """
+    post_target = _find_node_in_tree(post_visible, target_name)
+    if post_target is None:
+        return True
+    dx = abs(post_target.pos[0] - pre_pos[0])
+    dy = abs(post_target.pos[1] - pre_pos[1])
+    if dx > _CLICK_VERIFY_MOVE_THRESHOLD or dy > _CLICK_VERIFY_MOVE_THRESHOLD:
+        return True
+
+    return _PAGE_HASHER.compute(pre_visible) != _PAGE_HASHER.compute(post_visible)
 
 
 def smart_click(
@@ -190,7 +212,7 @@ def smart_click(
             post_nodes = device.get_poco_tree()
             post_visible = [n for n in post_nodes if n.visible]
 
-            if _tree_changed(visible_nodes, post_visible):
+            if _click_effective(params.node_name, (x, y), visible_nodes, post_visible):
                 return ToolResult(
                     success=True,
                     message=(
